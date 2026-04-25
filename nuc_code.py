@@ -9,7 +9,7 @@ import sensor_msgs_py.point_cloud2 as pc2
 import numpy as np
 
 # Flask server endpoint to receive matrices
-FLASK_SERVER_URL = "http://127.0.0.1:5001/matrices"
+FLASK_SERVER_URL = "http://192.168.0.101:5001/matrices"
 
 
 class LidarProcessor(Node):
