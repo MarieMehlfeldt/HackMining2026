@@ -26,6 +26,6 @@ def cluster_frame(coords:np.ndarray, eps:float=0.03, min_samples:int=5, max_dist
         return np.array(np.ones_like(indices[filter_])), indices[filter_]
     coords = coords[filter_]
     indices = indices[filter_]
-    # labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(coords)
-    labels = KMeans(n_clusters=10).fit_predict(coords)
+    labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(coords)
+    # labels = KMeans(n_clusters=10).fit_predict(coords)
     return labels, indices
