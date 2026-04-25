@@ -28,11 +28,13 @@ class LidarProcessor(Node):
 
         self.color = 3  # example value
 
-        self.state='SAFE'
+        self.state='CLEAN'
 
     def publish_color(self):
         msg = Int32()
-        if self.state=='SAFE':
+        if self.state=='CLEAN':
+            self.color=4
+        elif self.state=='SAFE':
             self.color=2
         elif self.state=='WARN':
             self.color=3
@@ -59,7 +61,7 @@ class LidarProcessor(Node):
 
         # 2. Get all field names dynamically
         field_names = [field.name for field in msg.fields]
-        self.get_logger().info(f"Fields: {field_names}")
+        #self.get_logger().info(f"Fields: {field_names}")
 
         # 3. Read points (skip NaNs)
         # Read points (structured array)
@@ -84,8 +86,9 @@ class LidarProcessor(Node):
             axis=1
         )
 
+        """
         self.get_logger().info(f"\nFirst 5 points:\n{point_matrix[:5]}")
-
+        
         # 6. Parsed points
         parsed_point_count = point_matrix.shape[0]
 
@@ -110,7 +113,7 @@ class LidarProcessor(Node):
             self.get_logger().info(
                 "All raw points were successfully converted to the matrix."
             )
-
+        """
         # 9. Example: access data
         # point_matrix[:, 0] -> x
         # point_matrix[:, 1] -> y
