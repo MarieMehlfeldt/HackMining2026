@@ -25,6 +25,7 @@ def process_frame(current_frame: dict[str, np.ndarray],
                                     eps=app_settings.dirt_clustering_eps,
                                     min_samples=app_settings.dirt_clustering_min_points,
                                     max_dist=app_settings.dirt_clustering_max_dist)
+    print(f"clustering took {start-time.perf_counter()} s.")
 
     dirty_points_in_sectors, coords_dirty_points, coords_clean_points = find_dirty_clusters(
         labels, indices, current_frame["coords"], current_frame["reflectivity"],

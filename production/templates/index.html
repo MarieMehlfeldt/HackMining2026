@@ -566,9 +566,9 @@
         pointsObj.geometry.computeBoundingSphere();
       }
 
-      // window.updatePointClouds = function(clean, dirty) {
-      //   updatePointCloud(cleanPts, clean); updatePointCloud(dirtyPts, dirty);
-      // };
+      window.updatePointClouds = function(clean, dirty) {
+        updatePointCloud(cleanPts, clean); updatePointCloud(dirtyPts, dirty);
+      };
 
       function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
       animate();
