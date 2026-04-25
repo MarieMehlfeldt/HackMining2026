@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from threading import Thread
 from .pipeline import process_frame, AppSettings
 
+
 app = Flask(__name__)
 
 SETTINGS = AppSettings()
@@ -123,8 +124,7 @@ def get_latest_matrices() -> Any:
         data = {name: arr.tolist() for name, arr in _latest_matrices.items()}
     return jsonify(data)
 
-
-if __name__ == "__main__":
+def main(args=None):
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5001"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
