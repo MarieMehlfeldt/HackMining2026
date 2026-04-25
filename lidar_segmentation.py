@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from matplotlib import pyplot as plt
 import numpy as np
@@ -57,23 +57,34 @@ class DBSegmenter:
         self.cmap = plt.get_cmap("tab20")
         self._wasactive = []
         self._chosen = []
+        # self.min_dist = min_dist
+        # self.max_dist = max_dist if max_dist else np.inf
     
-    def segment(self, point_cloud: o3d.geometry.PointCloud) -> list[o3d.geometry.PointCloud]:
+    def segment(self, point_cloud: o3d.geometry.PointCloud, background_color:np.ndarray=None,
+                callback:Callable|None = None) -> list[o3d.geometry.PointCloud]:
         labels = np.array(point_cloud.cluster_dbscan(eps=self.eps, min_points=self.min_points))
+        if callback is not None:
+            callback(labels=labels)
         max_label = labels.max()
         print(f"point cloud has {max_label + 1} clusters")
         cmap = plt.get_cmap("tab20")
         active = [False]*len(self.clusters)
         self._chosen = [False]*len(self.clusters)
-        new_clusters = []
         background = point_cloud.select_by_index(np.where(labels == -1)[0])
+        if background_color is not None:
+            bg_color = background_color[labels == -1]
+        # condition we don't have a background yet,
+        # background is always cluster 0
         if len(self.clusters) == 0:
             self.clusters.append(background)
             active.append(True)
             self._chosen.append(True)
             self._wasactive.append(False)
+        # we already have the background cluster
         else:
             self.clusters[0].points = background.points
+            if background_color is not None:
+                self.clusters[0].colors = o3d.utility.Vector3dVector(bg_color)
             active[0] = True
             self._chosen[0] = True
             self._wasactive[0] = True
@@ -88,7 +99,6 @@ class DBSegmenter:
             else:
                 cluster_cloud.paint_uniform_color(cmap(len(self.clusters) % 20)[:3])
                 self.clusters.append(cluster_cloud)
-                new_clusters.append(cluster_cloud)
                 active.append(True)
                 self._chosen.append(True)
                 self._wasactive.append(False)
@@ -113,14 +123,14 @@ class DBSegmenter:
             return closest_cluster, self.clusters[closest_cluster]
         else:
             return None, None
-        
+
     def generate_cache_frame(self, updated, removed, new):
         return ([(i, np.asarray(cluster.points, dtype=np.float32))
                             for i, cluster in updated],
                 removed,
                 [(i, np.asarray(cluster.points, dtype=np.float32))
                 for i, cluster in new])
-    
+
     def handle_cache_frame(self, vis, cache_frame):
         updated, removed, new = cache_frame
         for i, points in updated:
@@ -132,8 +142,44 @@ class DBSegmenter:
             vis.remove_geometry(self.clusters[i], reset_bounding_box=False)
         for i, points in new:
             self.clusters[i].points = o3d.utility.Vector3dVector(points)
-            self.clusters[i].paint_uniform_color(self.cmap(i % 20)[:3])
+            if i > 0:
+                self.clusters[i].paint_uniform_color(self.cmap(i % 20)[:3])
             vis.add_geometry(self.clusters[i], reset_bounding_box=False)
+
+
+class NearFieldSegmenter(DBSegmenter):
+    def __init__(self, eps:float=0.1, min_points:int=5, vmax=50, near_threshold=0.3):
+        super().__init__(eps, min_points, vmax)
+        self.near_threshold = near_threshold
+    
+    def segment(self, point_cloud: o3d.geometry.PointCloud, background_color:np.ndarray=None) -> list[o3d.geometry.PointCloud]:
+        near_mask = np.linalg.norm(np.asarray(point_cloud.points), axis=1) < self.near_threshold
+        near_cloud = point_cloud.select_by_index(np.where(near_mask)[0])
+        indices = np.arange(len(point_cloud.points))
+        bg_indices = indices[~near_mask]
+        near_indices = indices[near_mask]
+        near_labels = near_cloud.cluster_dbscan(eps=self.eps, min_points=self.min_points)
+        print(f"near cloud clusters have \n{np.bincount(near_labels[near_labels>0])} points")
+        bg = near_indices[near_labels == -1]
+        bg_indices = np.concatenate((bg_indices, bg))
+        background = point_cloud.select_by_index(bg_indices)
+        self.clusters.append(background)
+        self.clusters.extend([point_cloud.select_by_index(near_indices[near_labels == i])
+                              for i in range(0, near_labels.max() + 1)])
+        for i, clusters in enumerate(self.clusters[1:], start=0):
+            clusters.paint_uniform_color(self.cmap(i % 20)[:3])
+        return self.clusters
+        
+    def update_geometry(self, vis, updated, removed, new):
+        vis.clear_geometries()
+        for i, cluster in enumerate(self.clusters):
+            vis.add_geometry(cluster, reset_bounding_box=False)
+
+    
+    def generate_cache_frame(self, updated, removed, new):
+        return super().generate_cache_frame(updated, removed, new)
+
+
 
 def detect_planes(
         point_cloud: o3d.geometry.PointCloud,

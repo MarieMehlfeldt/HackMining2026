@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 from rosbags.rosbag2.reader import Reader
 from rosbags.typesys import Stores, get_typestore
-from plot_3d_lidar import play_lidar_video_open3d
 
 
 def get_lidar_data(file:Path):
@@ -101,7 +100,7 @@ def get_lidar_data(file:Path):
 
 if __name__ == "__main__":
     # this is a minimal example showing the usage of the get_lidar_data function.
-    path = Path("/mnt/c/Users/Lukas/Documents/hackmining26/sat_morning/")
+    path = Path("/Volumes/T7/minehack/sat_morning/rosbag2_2026_03_13-18_01_50")
     for folder in path.iterdir():
         # print(folder.name)
         if not folder.is_dir():
@@ -110,8 +109,6 @@ if __name__ == "__main__":
             if file_.suffix != ".mcap":
                 continue
             try:
-                play_lidar_video_open3d(file_,
-                                        max_points=250_000,
-                                        crit = 0.1)
+                get_lidar_data(file_)
             except Exception as e:
                 print(f"Error processing {file_}: {e}")
