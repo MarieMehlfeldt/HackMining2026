@@ -3,14 +3,75 @@ from rosbag_lidar import get_lidar_data
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
+import pandas as pd
 
 if __name__ == "__main__":
-    # this is a minimal example showing the usage of the get_lidar_data function.
-    folder_path = Path("/Users/mariemehlfeldt/Desktop/Hackmingin2026_Data/rosbag2_2026_03_13-17_22_03")
+    csv_path = Path("/Users/mariemehlfeldt/Desktop/HackMining2026/data_key.csv")
+    df = pd.read_csv(csv_path)
+    n_sectors = 5
 
-    threshold_distance = 0.10 # threshold distance in meters to consider a point as "dirt"
-    threshold_deriv = 0 # threshold for the first derivative of distance to consider a point as "dirt" (e.g., sudden change in distance)
-    threshold_reflect = 100 # threshold reflectivity to consider a point as "dirt"
+    for idx in df.index:
+        filename = df.loc[idx, "filename"]
+        folder_path = Path(f"/Volumes/T7/minehack/sat_morning/{filename}")
+
+        threshold_distance = 0.10 # threshold distance in meters to consider a point as "dirt"
+        threshold_deriv = 0 # threshold for the first derivative of distance to consider a point as "dirt" (e.g., sudden change in distance)
+        threshold_reflect = 100 # threshold reflectivity to consider a point as "dirt"
+        for file_ in folder_path.iterdir():
+            if file_.suffix != ".mcap":
+                continue
+            try:
+                data = list(get_lidar_data(file_))
+                coords = [d[0] for d in data]
+                intensity = [d[1] for d in data]
+                reflectivity = [d[2] for d in data]
+
+                frames_coords = coords
+                frames_reflectivity = reflectivity
+
+
+                
+                # precompute dirt percentages for all frames
+                for sector in range(n_sectors):
+                    dist_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
+                    reflect_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
+                    first_deriv_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
+                    percentage_dirt = np.zeros(len(frames_coords))
+                    n_sensors = coords[0].shape[0] * coords[0].shape[1]//n_sectors
+
+                    slice_start = (sector * frames_coords[0].shape[1]) // n_sectors
+                    slice_end = ((sector + 1) * frames_coords[0].shape[1]) // n_sectors
+                    for frame_idx in range(len(frames_coords)):
+                        points = frames_coords[frame_idx][:, slice_start:slice_end, :]
+                        dist_all[frame_idx, :] = np.linalg.norm(points, axis=2)
+                        reflect = frames_reflectivity[frame_idx][:, slice_start:slice_end]
+                        reflect_all[frame_idx, :] = reflect
+                        if frame_idx > 0:
+                            first_deriv_all[frame_idx, :] = dist_all[frame_idx, :] - dist_all[frame_idx - 1, :]
+                        percentage_dirt[frame_idx] = (np.sum((dist_all[frame_idx, :] < threshold_distance) & ((first_deriv_all[frame_idx, :] < threshold_deriv) | (reflect_all[frame_idx, :] < threshold_reflect))) / n_sensors) * 100
+
+                    # write results into csv file
+                    if f"dirt_percentage_sector_{sector}" not in df.columns:
+                        df[f"dirt_percentage_sector_{sector}"] = np.nan
+                    df.loc[idx, f"dirt_percentage_sector_{sector}"] = np.mean(percentage_dirt)
+                    print (f"Analyzed sector {sector + 1}/{n_sectors}")
+                    print (f"Mean percentage of dirt across all frames: {np.mean(percentage_dirt):.2f}%")
+                    print (f"Maximum percentage of dirt in any frame: {np.max(percentage_dirt):.2f}%")
+                    print (f"Minimum percentage of dirt in any frame: {np.min(percentage_dirt):.2f}%")
+                    print (f"Standard deviation of percentage of dirt across all frames: {np.std(percentage_dirt):.2f}%")
+
+                    if f"mean_reflectivity_sector_{sector}" not in df.columns:
+                        df[f"mean_reflectivity_sector_{sector}"] = np.nan
+                    df.loc[idx, f"mean_reflectivity_sector_{sector}"] = np.mean(reflect_all)
+                    print (f"Mean reflectivity: {np.mean(reflect_all):.2f}")
+                    print (f"Max reflectivity: {np.max(reflect_all):.2f}")
+                    print (f"Min reflectivity: {np.min(reflect_all):.2f}")
+                    print (f"Std reflectivity: {np.std(reflect_all):.2f} \n")
+            except Exception as e:
+                print (f"Error processing file {filename}: {e}")
+
+    df.to_csv(csv_path, index=False)
+
     for file_ in folder_path.iterdir():
         if file_.suffix != ".mcap":
             continue
@@ -21,39 +82,6 @@ if __name__ == "__main__":
 
         frames_coords = coords
         frames_reflectivity = reflectivity
-
-        n_sectors = 6
-        
-        # precompute dirt percentages for all frames
-        for sector in range(n_sectors):
-            dist_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
-            reflect_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
-            first_deriv_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
-            percentage_dirt = np.zeros(len(frames_coords))
-            n_sensors = coords[0].shape[0] * coords[0].shape[1]//n_sectors
-
-            slice_start = (sector * frames_coords[0].shape[1]) // n_sectors
-            slice_end = ((sector + 1) * frames_coords[0].shape[1]) // n_sectors
-            for frame_idx in range(len(frames_coords)):
-                points = frames_coords[frame_idx][:, slice_start:slice_end, :]
-                dist_all[frame_idx, :] = np.linalg.norm(points, axis=2)
-                reflect = frames_reflectivity[frame_idx][:, slice_start:slice_end]
-                reflect_all[frame_idx, :] = reflect
-                if frame_idx > 0:
-                    first_deriv_all[frame_idx, :] = dist_all[frame_idx, :] - dist_all[frame_idx - 1, :]
-                percentage_dirt[frame_idx] = (np.sum((dist_all[frame_idx, :] < threshold_distance) & ((first_deriv_all[frame_idx, :] < threshold_deriv) | (reflect_all[frame_idx, :] < threshold_reflect))) / n_sensors) * 100
-
-            print (f"Analyzed sector {sector + 1}/{n_sectors}")
-            print (f"Mean percentage of dirt across all frames: {np.mean(percentage_dirt):.2f}%")
-            print (f"Maximum percentage of dirt in any frame: {np.max(percentage_dirt):.2f}%")
-            print (f"Minimum percentage of dirt in any frame: {np.min(percentage_dirt):.2f}%")
-            print (f"Standard deviation of percentage of dirt across all frames: {np.std(percentage_dirt):.2f}%")
-
-            print (f"Mean reflectivity: {np.mean(reflect_all):.2f}")
-            print (f"Max reflectivity: {np.max(reflect_all):.2f}")
-            print (f"Min reflectivity: {np.min(reflect_all):.2f}")
-            print (f"Std reflectivity: {np.std(reflect_all):.2f} \n")
-
 
         fig, (ax1, ax2, ax3) = plt.subplots(
         1, 3,
