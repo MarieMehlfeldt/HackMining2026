@@ -5,6 +5,19 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 import pandas as pd
 
+
+def find_dirt_perc(frame_coords, frame_reflectivity, frame_coords_pre, threshold_distance, threshold_deriv, threshold_reflect):
+    dist = np.linalg.norm(frame_coords, axis=2).flatten()
+    reflect_flat = frame_reflectivity.reshape(-1)
+    if frame_coords_pre.size == 0:
+        dirt_mask = (dist < threshold_distance) & (reflect_flat < threshold_reflect)
+    else:
+        dist_pre = np.linalg.norm(frame_coords_pre, axis=2).flatten()
+        dist_deriv = dist - dist_pre
+        dirt_mask = (dist < threshold_distance) & ((dist_deriv < threshold_deriv) | (reflect_flat < threshold_reflect))
+    perc_dirt = (np.sum(dirt_mask) / len(dist)) * 100
+    return perc_dirt
+
 if __name__ == "__main__":
     csv_path = Path("/Users/mariemehlfeldt/Desktop/HackMining2026/data_key.csv")
     df = pd.read_csv(csv_path)
