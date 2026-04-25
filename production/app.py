@@ -6,10 +6,11 @@ from threading import Lock, Thread
 from typing import Any
 
 import numpy as np
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from dataclasses import dataclass
 from .pipeline import process_frame, AppSettings
 import requests
+from . import cloud_state
 
 
 app = Flask(__name__)
@@ -20,16 +21,17 @@ SETTINGS = AppSettings()
 ALLOWED_SENDER_IP = os.getenv("ALLOWED_SENDER_IP", "192.168.0.33")
 
 EXPECTED_SHAPES = {
-    "coords": (16, 720, 3),
-    "intensity": (16 * 720, 1),
+    "coords":       (16, 720, 3),
+    "intensity":    (16 * 720, 1),
     "reflectivity": (16, 720, 1),
 }
 
 _latest_matrices: dict[str, np.ndarray] | None = None
-_old_matrices: dict[str, np.ndarray] | None = None
+_old_matrices:    dict[str, np.ndarray] | None = None
 _store_lock = Lock()
 
-UPSTREAM_URL = os.getenv("UPSTREAM_URL", "http://192.168.0.33:5000/matrices")  # example
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _get_client_ip() -> str:
     """Return client IP, honoring proxy forwarding headers if present."""
@@ -62,55 +64,72 @@ def _parse_matrix(value: Any, expected_shape: tuple[int, ...], name: str) -> np.
     return array.astype(np.float32, copy=False)
 
 
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.get("/")
+def home() -> Any:
+    """Serve the dashboard webpage."""
+    return render_template("index.html")
+
+
 @app.get("/health")
 def health() -> Any:
     return jsonify({"status": "ok", "allowed_sender_ip": ALLOWED_SENDER_IP})
 
 
-@app.route("/matrices", methods=["GET", "POST"])
+@app.post("/matrices")
 def receive_matrices() -> Any:
-    """Receive and validate the three required matrices from the allowed sender IP."""
-    global _latest_matrices
-    global _old_matrices
+    """Receive and validate the three required matrices from the allowed sender IP,
+    then launch the processing pipeline in a background thread."""
+    global _latest_matrices, _old_matrices
 
-    if request.method == "POST":
-        client_ip = _get_client_ip()
-        if client_ip != ALLOWED_SENDER_IP:
-            return jsonify({"error": f"Forbidden sender IP: {client_ip}"}), 403
+    client_ip = _get_client_ip()
+    if client_ip != ALLOWED_SENDER_IP:
+        return jsonify({"error": f"Forbidden sender IP: {client_ip}"}), 403
 
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            return jsonify({"error": "Expected JSON object payload."}), 400
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Expected JSON object payload."}), 400
 
-        missing = [name for name in EXPECTED_SHAPES if name not in payload]
-        if missing:
-            return jsonify({"error": f"Missing required matrices: {missing}"}), 400
+    missing = [name for name in EXPECTED_SHAPES if name not in payload]
+    if missing:
+        return jsonify({"error": f"Missing required matrices: {missing}"}), 400
 
-        try:
-            matrices = {
-                name: _parse_matrix(payload[name], expected_shape, name)
-                for name, expected_shape in EXPECTED_SHAPES.items()
-            }
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-
-        with _store_lock:
-            global _latest_matrices
-            global _old_matrices
-            _old_matrices = _latest_matrices
-            _latest_matrices = matrices
-
-        Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
-        print("Received matrices, starting processing thread...")
-        # process_frame(matrices, _old_matrices, SETTINGS)
-
-    return jsonify(
-        {
-            "status": "received",
-            "sender_ip": client_ip,
-            "shapes": {name: list(arr.shape) for name, arr in matrices.items()},
+    try:
+        matrices = {
+            name: _parse_matrix(payload[name], expected_shape, name)
+            for name, expected_shape in EXPECTED_SHAPES.items()
         }
-    )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    with _store_lock:
+        _old_matrices    = _latest_matrices
+        _latest_matrices = matrices
+
+    Thread(
+        target=process_frame,
+        args=(matrices, _old_matrices, SETTINGS),
+        daemon=True
+    ).start()
+
+    print("Received matrices, starting processing thread...")
+
+    return jsonify({
+        "status":    "received",
+        "sender_ip": client_ip,
+        "shapes":    {name: list(arr.shape) for name, arr in matrices.items()},
+    })
+
+
+@app.get("/matrices")
+def get_latest_matrices() -> Any:
+    """Fetch the most recently uploaded matrices as JSON lists."""
+    with _store_lock:
+        if _latest_matrices is None:
+            return jsonify({"error": "No matrices received yet."}), 404
+        data = {name: arr.tolist() for name, arr in _latest_matrices.items()}
+    return jsonify(data)
 
 
 @app.get("/matrices/shapes")
@@ -123,20 +142,33 @@ def get_latest_shapes() -> Any:
     return jsonify({"shapes": shapes})
 
 
-@app.get("/matrices")
-def get_latest_matrices() -> Any:
-    """Fetch the most recently uploaded matrices as JSON lists."""
-    with _store_lock:
-        if _latest_matrices is None:
-            return jsonify({"error": "No matrices received yet."}), 404
-        data = {name: arr.tolist() for name, arr in _latest_matrices.items()}
-    return jsonify(data)
+# ── Webpage API endpoints ───────────────────────────────────────────────────────
+
+@app.get("/api/sectors")
+def get_sectors() -> Any:
+    """Return the latest per-sector dirtiness values for the radar card."""
+    with cloud_state.sectors_lock:
+        return jsonify({
+            "ok":      True,
+            "sectors": cloud_state.sectors_state["sectors"],
+            "value":   cloud_state.sectors_state["value"],
+        })
+
+
+@app.get("/api/pointcloud")
+def get_pointcloud() -> Any:
+    """Return the latest clean/dirty point cloud coordinates for the 3D card."""
+    with cloud_state.pointcloud_lock:
+        return jsonify(cloud_state.pointcloud_state)
+
+
+# ── Optional upstream polling (disabled by default) ────────────────────────────
+
+UPSTREAM_URL = os.getenv("UPSTREAM_URL", "http://192.168.0.33:5000/matrices")
 
 def poll_upstream_forever():
     while True:
         try:
-            # Example assumes upstream exposes a GET endpoint returning
-            # {"coords": ..., "intensity": ..., "reflectivity": ...}
             resp = requests.get(UPSTREAM_URL, timeout=2.0)
             resp.raise_for_status()
             payload = resp.json()
@@ -148,20 +180,26 @@ def poll_upstream_forever():
 
             with _store_lock:
                 global _latest_matrices, _old_matrices
-                _old_matrices = _latest_matrices
+                _old_matrices    = _latest_matrices
                 _latest_matrices = matrices
 
-            Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS), daemon=True).start()
+            Thread(
+                target=process_frame,
+                args=(matrices, _old_matrices, SETTINGS),
+                daemon=True
+            ).start()
 
         except Exception as exc:
             app.logger.warning(f"Polling failed: {exc}")
 
-        time.sleep(0.05)  # 20 Hz polling
+        time.sleep(0.05)  # 20 Hz
+
 
 def main(args=None):
+    # Uncomment to enable upstream polling instead of receiving POST requests:
     # Thread(target=poll_upstream_forever, daemon=True).start()
 
-    host = os.getenv("FLASK_HOST", "0.0.0.0")
-    port = int(os.getenv("FLASK_PORT", "5001"))
+    host  = os.getenv("FLASK_HOST",  "0.0.0.0")
+    port  = int(os.getenv("FLASK_PORT",  "5001"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
     app.run(host=host, port=port, debug=debug)

@@ -2,6 +2,7 @@ import numpy as np
 from .clustering import cluster_frame
 from .dirty_clusters import find_dirty_clusters
 from dataclasses import dataclass
+from . import cloud_state
 
 
 @dataclass
@@ -22,4 +23,7 @@ def process_frame(current_frame:dict[str, np.ndarray],
         old_frame["coords"], threshold_distance=0.3, threshold_deriv=0.1,
         threshold_reflect=0.1, n_sectors=10
     )
+    with cloud_state.pointcloud_lock:
+        cloud_state.pointcloud_state["clean"] = coords_clean_points.tolist()
+        cloud_state.pointcloud_state["dirty"] = coords_dirty_points.tolist()
     print(f"Dirty points in sectors: {dirty_points_in_sectors}")
