@@ -71,7 +71,7 @@ def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame
         else:
             coords_clean_points.extend(cluster_coords)
 
-    dirty_perc_in_sectors = (dirty_points_in_sectors / n_point_in_sectors) * 100
+    dirty_perc_in_sectors = (dirty_points_in_sectors / n_point_in_sectors) * 100 * 5
     return dirty_perc_in_sectors, coords_dirty_points, coords_clean_points
 
 
