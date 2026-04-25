@@ -1,12 +1,15 @@
+from functools import partial
 from pathlib import Path
 import time
-from typing import Any, Iterable, Literal
+from typing import Any, Callable, Iterable, Literal
+import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import open3d as o3d
 from lidar_segmentation import detect_planes, detect_dbscan, DBSegmenter, MockSegmenter
+from rosbag_lidar import get_lidar_data
 
 def _resolve_cmap(
         values: np.ndarray,
@@ -101,62 +104,67 @@ def _build_xy_grid_lineset(o3d, extent: float, step: float):
 
 def _prepare_cloud_frame(
         frame: tuple[np.ndarray, np.ndarray, np.ndarray],
-        max_points: int,
-        color_coding: Literal["intensity", "distance"] = "intensity"
-) -> tuple[np.ndarray, np.ndarray]:
+        color_coding: Literal["intensity", "distance", "reflectivity"] = "intensity",
+        min_dist=0,
+        max_dist=np.inf
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Flatten and downsample one lidar frame for plotting."""
-    coords, intensity, _reflectivity = frame
+    coords, intensity, reflectivity = frame
     points = coords.reshape(-1, 3)
+    indices = np.arange(points.shape[0], dtype=np.uint32)
     if color_coding == "intensity":
         color_coder = intensity.reshape(-1)
+    elif color_coding == "reflectivity":
+        color_coder = reflectivity.reshape(-1)
     else:
         color_coder = np.linalg.norm(points, axis=1)
         color_coder = np.max(color_coder) - color_coder  # invert so closer points are brighter
     color_coder = color_coder.reshape(-1)
+    dist = np.linalg.norm(points, axis=1)
+    valid = (dist >= min_dist) & (dist <= max_dist)
 
-    valid = np.isfinite(points).all(axis=1)
+    valid &= np.isfinite(points).all(axis=1)
     points = points[valid]
     color_coder = color_coder[valid]
     if points.size == 0:
-        return np.empty((0, 3), dtype=np.float32), np.empty((0,), dtype=np.float32)
+        return (np.empty((0, 3), dtype=np.float32), np.empty((0,), dtype=np.float32),
+                np.empty((0, 3), dtype=np.uint32))
 
-    if points.shape[0] > max_points:
-        stride = int(np.ceil(points.shape[0] / max_points))
-        points = points[::stride]
-        color_coder = color_coder[::stride]
+    return (points.astype(np.float32, copy=False), color_coder.astype(np.float32, copy=False),
+            indices[valid])
 
-    return points.astype(np.float32, copy=False), color_coder.astype(np.float32, copy=False)
 
 def _add_geometry_backdrop(vis):
-    extent = 2
-    step = max(0.5, extent / 20.0)
+    extent = 10
+    step = 0.5
 
     grid_geom = _build_xy_grid_lineset(o3d, extent=extent, step=step)
-    origin_geom = o3d.geometry.TriangleMesh.create_sphere(radius=step * 0.35)
-    origin_geom.paint_uniform_color([1.0, 0.0, 0.0])
-    axis_geom = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        size=step * 1.8,
-        origin=[0.0, 0.0, 0.0],
-    )
+    # origin_geom = o3d.geometry.TriangleMesh.create_sphere(radius=step * 0.35)
+    # origin_geom.paint_uniform_color([1.0, 0.0, 0.0])
+    # axis_geom = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    #     size=step * 1.8,
+    #     origin=[0.0, 0.0, 0.0],
+    # )
 
     vis.add_geometry(grid_geom, reset_bounding_box=False)
-    vis.add_geometry(origin_geom, reset_bounding_box=False)
-    vis.add_geometry(axis_geom, reset_bounding_box=False)
-    aux_geometry_added = True
+    # vis.add_geometry(origin_geom, reset_bounding_box=False)
+    # vis.add_geometry(axis_geom, reset_bounding_box=False)
 
 def play_lidar_video_open3d(
         input_: Path | Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]],
         fps: float = 20.0,
-        max_points: int = 250_000,
         loop: bool = True,
         max_frames: int | None = None,
-        color_coding:Literal["intensity", "distance"] = "distance",
+        color_coding:Literal["intensity", "distance", "reflectivity"] = "distance",
         cmap: str | object = "turbo",
         norm: mcolors.Normalize | None = None,
         norm_vmin: float | None = None,
         norm_vmax: float | None = None,
         crit:float|None = None,
         gap:float=0.1,
+        max_dist:float=np.inf,
+        min_dist:float=0.0,
+        cluster_callback:Callable|None = None
 ) -> None:
     """Play lidar frames as a repeating interactive Open3D animation.
 
@@ -204,7 +212,7 @@ def play_lidar_video_open3d(
     origin_geom = None
     axis_geom = None
     frame_interval = 1.0 / fps
-    segmenter = DBSegmenter(min_points=10, vmax=50.0)
+    segmenter = DBSegmenter(eps=0.03, min_points=5, vmax=50.0)
     # segmenter = MockSegmenter()
 
     if isinstance(input_, Path):
@@ -215,9 +223,11 @@ def play_lidar_video_open3d(
     # potentially change to preallocated array but needs info from bag file
     frame_cache = []
 
-    def plot_frame(vis, points, color_coder, reset_bbox=False):
+    def plot_frame(vis, frame, min_dist, max_dist, color_coding, reset_bbox=False, cluster_callback:Callable|None=None):
         nonlocal geometry_added, aux_geometry_added, grid_geom, origin_geom, axis_geom
-
+        
+        points, color_coder, indices = _prepare_cloud_frame(
+            frame, color_coding=color_coding, min_dist=min_dist, max_dist=max_dist)
         rgb = _resolve_cmap(
             color_coder,
             cmap=cmap,
@@ -239,8 +249,15 @@ def play_lidar_video_open3d(
 
         cloud.points = o3d.utility.Vector3dVector(display_points)
         cloud.colors = o3d.utility.Vector3dVector(display_rgb)
-
-        updated, removed, new = segmenter.segment(cloud)
+        if cluster_callback is not None:
+            try:
+                callback = partial(cluster_callback, indices=indices)
+            except Exception as exc:
+                warnings.warn(f"Failed to create partial callback for cluster_callback: {exc}")
+                callback = None
+        else:
+            callback = None
+        updated, removed, new = segmenter.segment(cloud, display_rgb, callback=callback)
 
         for i, cluster in updated:
             vis.update_geometry(cluster)
@@ -274,11 +291,10 @@ def play_lidar_video_open3d(
             _add_geometry_backdrop(vis)
             if len(frame_cache) == 0:
                 for i, frame in enumerate(frame_source):
-                    deadline = time.perf_counter() + frame_interval
-                    points, color_coder = _prepare_cloud_frame(
-                        frame, max_points=max_points, color_coding=color_coding)
-                    
-                    display_out = plot_frame(vis, points, color_coder, reset_bbox=(i == 0))
+                    deadline = time.perf_counter() + frame_interval                    
+                    display_out = plot_frame(vis, frame, min_dist=min_dist, max_dist=max_dist,
+                                             color_coding=color_coding, reset_bbox=(i == 0),
+                                             cluster_callback=cluster_callback)
                     if display_out is None:
                         return
                     frame_count += 1
@@ -303,3 +319,22 @@ def play_lidar_video_open3d(
                 break
     finally:
         vis.destroy_window()
+
+
+if __name__ == "__main__":
+    # this is a minimal example showing the usage of the play_lidar_video_open3d function.
+    path = Path("D:\\minehack\\sat_morning\\rosbag2_2026_03_13-18_08_00")
+    if not path.is_dir():
+        raise ValueError(f"Path {path} is not a directory")
+    for file_ in path.iterdir():
+        if file_.suffix != ".mcap":
+            continue
+        try:
+            play_lidar_video_open3d(file_,
+                                    crit = 0.1,
+                                    color_coding="reflectivity",
+                                    cmap="berlin",
+                                    min_dist=0.0,
+                                    max_dist=0.3)
+        except Exception as e:
+            print(f"Error processing {file_}: {e}")
