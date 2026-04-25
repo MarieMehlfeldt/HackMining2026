@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 from rosbags.rosbag2.reader import Reader
 from rosbags.typesys import Stores, get_typestore
-from plot_3d_lidar import play_lidar_video_open3d
 
 
 def get_lidar_data(file:Path):
@@ -109,8 +108,6 @@ if __name__ == "__main__":
             if file_.suffix != ".mcap":
                 continue
             try:
-                play_lidar_video_open3d(file_,
-                                        max_points=250_000,
-                                        crit = 0.1)
+                get_lidar_data(file_)
             except Exception as e:
                 print(f"Error processing {file_}: {e}")
