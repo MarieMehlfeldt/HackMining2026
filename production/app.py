@@ -1,14 +1,15 @@
 """Flask server to receive and serve validated NumPy matrices."""
 
 import os
-from threading import Lock
+import time
+from threading import Lock, Thread
 from typing import Any
 
 import numpy as np
 from flask import Flask, jsonify, request
 from dataclasses import dataclass
-from threading import Thread
 from .pipeline import process_frame, AppSettings
+import requests
 
 
 app = Flask(__name__)
@@ -28,6 +29,7 @@ _latest_matrices: dict[str, np.ndarray] | None = None
 _old_matrices: dict[str, np.ndarray] | None = None
 _store_lock = Lock()
 
+UPSTREAM_URL = os.getenv("UPSTREAM_URL", "http://192.168.0.33:5000/matrices")  # example
 
 def _get_client_ip() -> str:
     """Return client IP, honoring proxy forwarding headers if present."""
@@ -124,7 +126,35 @@ def get_latest_matrices() -> Any:
         data = {name: arr.tolist() for name, arr in _latest_matrices.items()}
     return jsonify(data)
 
+def poll_upstream_forever():
+    while True:
+        try:
+            # Example assumes upstream exposes a GET endpoint returning
+            # {"coords": ..., "intensity": ..., "reflectivity": ...}
+            resp = requests.get(UPSTREAM_URL, timeout=2.0)
+            resp.raise_for_status()
+            payload = resp.json()
+
+            matrices = {
+                name: _parse_matrix(payload[name], expected_shape, name)
+                for name, expected_shape in EXPECTED_SHAPES.items()
+            }
+
+            with _store_lock:
+                global _latest_matrices, _old_matrices
+                _old_matrices = _latest_matrices
+                _latest_matrices = matrices
+
+            Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS), daemon=True).start()
+
+        except Exception as exc:
+            app.logger.warning(f"Polling failed: {exc}")
+
+        time.sleep(0.05)  # 20 Hz polling
+
 def main(args=None):
+    Thread(target=poll_upstream_forever, daemon=True).start()
+
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5001"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
