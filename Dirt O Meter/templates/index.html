@@ -1,101 +1,153 @@
 <!DOCTYPE html>
 <html lang="en">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dirt-O-Meter + LiDAR 360° Sector View</title>
-
+ 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-
+ 
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
-
+ 
+    /* ─── Page shell ─────────────────────────────────────────────────────────── */
     body {
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
       display: flex;
-      align-items: center;
+      align-items: stretch;
       justify-content: center;
       background: #f0f2f5;
       font-family: 'DM Sans', Arial, sans-serif;
       color: #1a1d23;
-      padding: 32px;
+      padding: 20px;
     }
-
+ 
+    /* ─── Three-column dashboard ─────────────────────────────────────────────── */
     .dashboard {
       display: flex;
-      gap: 24px;
-      align-items: stretch;
-      justify-content: center;
-      flex-wrap: wrap;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      gap: 16px;
+      width: 100%;
+      height: 100%;
     }
-
+ 
+    /* ─── Base card ──────────────────────────────────────────────────────────── */
     .card {
       background: #fff;
       border-radius: 20px;
       box-shadow: 0 8px 40px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
-      padding: 40px 44px 36px;
-      width: 400px;
+      padding: 28px 24px;
       display: flex;
       flex-direction: column;
       align-items: center;
+      overflow-y: auto;
+      min-width: 0;
     }
-
+ 
+    /* Left: 1/5 */
+    .gauge-card {
+      flex: 1;
+    }
+ 
+    /* Middle: 2/5 */
     .radar-card {
-      width: 470px;
+      flex: 2;
     }
-
-    .rock-card {
-      width: 380px;
-      justify-content: flex-start;
+ 
+    /* Right: 2/5 */
+    .pointcloud-card {
+      flex: 2;
+      align-items: flex-start;
     }
-
-    .rock-card.is-hidden {
-      display: none;
-    }
-
+ 
+    /* ─── Shared header ──────────────────────────────────────────────────────── */
     .header {
       text-align: center;
-      margin-bottom: 28px;
+      margin-bottom: 20px;
+      width: 100%;
     }
-
+ 
     .title {
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 600;
       letter-spacing: -0.4px;
     }
-
+ 
     .subtitle {
-      font-size: 12.5px;
+      font-size: 12px;
       color: #7a8090;
       margin-top: 4px;
     }
-
-    #gauge,
-    #radar {
-      display: block;
+ 
+    /* ─── Gauge card internals ───────────────────────────────────────────────── */
+ 
+    /* Wrapper that holds the canvas + the sus-rock overlay on top */
+    .gauge-wrap {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
     }
-
+ 
+    #gauge {
+      display: block;
+      max-width: 100%;
+    }
+ 
+    /* Sus-rock overlay — hidden by default, shown when rock mode is active + critical */
+    .rock-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.88);
+      border-radius: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+      z-index: 10;
+    }
+ 
+    .rock-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+ 
+    .rock-overlay img {
+      max-width: 85%;
+      max-height: 85%;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+ 
+    /* Percentage readout */
     .readout {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      margin-top: 10px;
+      margin-top: 8px;
       margin-bottom: 4px;
+      width: 100%;
     }
-
+ 
     .pct {
       font-family: 'DM Mono', monospace;
-      font-size: 52px;
+      font-size: clamp(32px, 4vw, 52px);
       font-weight: 500;
       line-height: 1;
       letter-spacing: -2px;
     }
-
+ 
     .pill {
       font-size: 11px;
       font-weight: 500;
@@ -104,67 +156,68 @@
       padding: 4px 14px;
       border-radius: 100px;
     }
-
+ 
     .instance {
-      margin-top: 10px;
+      margin-top: 6px;
       font-family: 'DM Mono', monospace;
-      font-size: 12px;
+      font-size: 11px;
       color: #7a8090;
+      text-align: center;
     }
-
+ 
     .divider {
       width: 100%;
       height: 1px;
       background: #eef0f4;
-      margin: 24px 0 20px;
+      margin: 16px 0 14px;
     }
-
+ 
+    /* Junior Minor toggle */
     .feature-toggle {
       width: 100%;
-      margin-bottom: 18px;
       background: #f8fafc;
       border: 1px solid #eef0f4;
       border-radius: 16px;
-      padding: 14px 16px;
+      padding: 12px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
+      gap: 12px;
     }
-
+ 
     .toggle-copy {
       display: flex;
       flex-direction: column;
       gap: 2px;
     }
-
+ 
     .toggle-title {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       color: #111827;
       text-transform: uppercase;
       letter-spacing: 0.7px;
     }
-
+ 
     .toggle-subtitle {
-      font-size: 11.5px;
+      font-size: 10.5px;
       color: #7a8090;
     }
-
+ 
     .switch {
       position: relative;
       display: inline-block;
-      width: 50px;
-      height: 28px;
+      width: 46px;
+      height: 26px;
       flex: 0 0 auto;
     }
-
+ 
     .switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
-
+ 
     .switch-slider {
       position: absolute;
       cursor: pointer;
@@ -173,12 +226,12 @@
       transition: 0.2s;
       border-radius: 999px;
     }
-
+ 
     .switch-slider::before {
       content: "";
       position: absolute;
-      height: 22px;
-      width: 22px;
+      height: 20px;
+      width: 20px;
       left: 3px;
       top: 3px;
       background: #ffffff;
@@ -186,99 +239,16 @@
       border-radius: 50%;
       box-shadow: 0 2px 6px rgba(0,0,0,0.18);
     }
-
-    .switch input:checked + .switch-slider {
-      background: #111827;
-    }
-
-    .switch input:checked + .switch-slider::before {
-      transform: translateX(22px);
-    }
-
-    .slider-section {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .slider-label {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .slider-label span:first-child {
-      font-size: 11.5px;
-      font-weight: 500;
-      color: #7a8090;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-    }
-
-    .slider-val {
-      font-family: 'DM Mono', monospace;
-      font-size: 13px;
-      font-weight: 500;
-    }
-
-    input[type=range] {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 100%;
-      height: 6px;
-      border-radius: 3px;
-      background: #e4e7ee;
-      outline: none;
-      cursor: pointer;
-    }
-
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: #fff;
-      border: 2.5px solid #c0c6d0;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-    }
-
-    input[type=range]::-moz-range-thumb {
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: #fff;
-      border: 2.5px solid #c0c6d0;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-      cursor: pointer;
-    }
-
-    .demo-indicator {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      justify-content: flex-end;
-    }
-
-    .demo-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #22c55e;
-      animation: blink 1.2s ease-in-out infinite;
-    }
-
-    .demo-text {
-      font-size: 11px;
-      color: #9aa0ae;
-    }
-
+ 
+    .switch input:checked + .switch-slider { background: #111827; }
+    .switch input:checked + .switch-slider::before { transform: translateX(20px); }
+ 
+    /* ─── Radar card internals ───────────────────────────────────────────────── */
     #radar {
-      width: 360px;
-      height: 360px;
-      margin-top: 4px;
+      display: block;
+      max-width: 100%;
     }
-
+ 
     .radar-status {
       margin-top: 12px;
       font-size: 13px;
@@ -288,24 +258,25 @@
       border-radius: 999px;
       background: #f8fafc;
       color: #334155;
+      width: 100%;
     }
-
+ 
     .radar-summary {
       width: 100%;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
-      margin-top: 18px;
+      margin-top: 12px;
     }
-
+ 
     .summary-box {
       background: #f8fafc;
       border: 1px solid #eef0f4;
       border-radius: 14px;
-      padding: 12px;
+      padding: 10px;
       text-align: center;
     }
-
+ 
     .summary-box span {
       display: block;
       font-size: 10px;
@@ -314,207 +285,219 @@
       letter-spacing: 0.6px;
       margin-bottom: 4px;
     }
-
+ 
     .summary-box strong {
       font-family: 'DM Mono', monospace;
-      font-size: 16px;
+      font-size: 15px;
       color: #1a1d23;
     }
-
+ 
     .sector-grid {
       width: 100%;
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       gap: 8px;
-      margin-top: 16px;
+      margin-top: 12px;
     }
-
+ 
     .sector-item {
       background: #ffffff;
       border: 1px solid #eef0f4;
       border-radius: 12px;
-      padding: 10px 8px;
+      padding: 8px 6px;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 4px;
-      font-size: 12px;
+      font-size: 11px;
     }
-
+ 
     .sector-item .name {
       font-weight: 600;
       color: #374151;
     }
-
+ 
     .sector-item .value {
       font-family: 'DM Mono', monospace;
       color: #111827;
     }
-
-    .small-note {
-      margin-top: 16px;
-      font-size: 11.5px;
-      color: #7a8090;
-      text-align: center;
-      line-height: 1.45;
-      max-width: 350px;
+ 
+    /* ─── Placeholder card ───────────────────────────────────────────────────── */
+    .placeholder-card .header {
+      margin-bottom: 0;
     }
-
-    .rock-wrap {
+ 
+    .placeholder-body {
+      flex: 1;
       width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      margin-top: 6px;
-    }
-
-    .rock-image-frame {
-      width: 260px;
-      height: 260px;
-      background: #f8fafc;
-      border: 1px solid #eef0f4;
-      border-radius: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 10px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
-    }
-
-    .rock-image-frame img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-    }
-
-    .rock-status-pill {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      padding: 7px 14px;
-      border-radius: 999px;
-      background: #eef2f7;
-      color: #334155;
-    }
-
-    .rock-caption {
-      text-align: center;
+      border: 2px dashed #e4e7ee;
+      border-radius: 14px;
+      margin-top: 16px;
+      color: #b0b7c3;
       font-size: 13px;
-      color: #64748b;
-      line-height: 1.5;
-      max-width: 270px;
+      font-weight: 500;
     }
-
-    .rock-level-box {
-      width: 100%;
-      background: #f8fafc;
+ 
+    /* ─── Manual override (floating — delete entire block to remove) ─────────── */
+    #manualOverride {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.96);
       border: 1px solid #eef0f4;
       border-radius: 14px;
-      padding: 14px;
-      text-align: center;
-      margin-top: 6px;
-    }
-
-    .rock-level-box span {
-      display: block;
-      font-size: 10px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+      z-index: 200;
+      font-size: 11px;
       color: #7a8090;
+      font-family: 'DM Sans', Arial, sans-serif;
+    }
+ 
+    #manualOverride label {
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.6px;
-      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
     }
-
-    .rock-level-box strong {
+ 
+    #manualOverride input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 5px;
+      border-radius: 3px;
+      background: #e4e7ee;
+      outline: none;
+      cursor: pointer;
+    }
+ 
+    #manualOverride input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid #c0c6d0;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+ 
+    #sliderVal {
       font-family: 'DM Mono', monospace;
-      font-size: 18px;
-      color: #111827;
+      font-size: 12px;
+      font-weight: 500;
+      color: #1a1d23;
+      min-width: 24px;
     }
-
+ 
+    #modeText {
+      font-size: 10px;
+      color: #b0b7c3;
+      white-space: nowrap;
+    }
+ 
+    /* ─── Animations ─────────────────────────────────────────────────────────── */
     @keyframes blink {
       0%, 100% { opacity: 1; }
-      50% { opacity: 0.25; }
+      50%       { opacity: 0.25; }
     }
-
-    @media (max-width: 1200px) {
-      .card,
-      .radar-card,
-      .rock-card {
-        width: 100%;
-        max-width: 470px;
-      }
-
+ 
+    /* ─── Responsive fallback (narrow screens) ───────────────────────────────── */
+    @media (max-width: 900px) {
       body {
-        align-items: flex-start;
+        height: auto;
+        overflow: auto;
+        padding: 16px;
       }
-
+ 
+      .dashboard {
+        flex-direction: column;
+        height: auto;
+      }
+ 
+      .gauge-card,
+      .radar-card,
+      .placeholder-card {
+        flex: none;
+        width: 100%;
+      }
+ 
       .sector-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);
       }
     }
   </style>
 </head>
-
+ 
 <body>
+ 
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       MANUAL OVERRIDE — floating test slider
+       To remove: delete from here to the closing div tag below
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <div id="manualOverride">
+    <label>Manual Override</label>
+    <input type="range" id="slider" min="0" max="100" value="0" />
+    <span id="sliderVal">0</span>
+    <span id="modeText"></span>
+  </div>
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       END MANUAL OVERRIDE
+       ═══════════════════════════════════════════════════════════════════════════ -->
+ 
   <div class="dashboard">
-
-    <div class="card">
+ 
+    <!-- ── LEFT CARD: Dirt-O-Meter + Rock overlay (1/5) ──────────────────────── -->
+    <div class="card gauge-card">
       <div class="header">
         <div class="title">Dirt-O-Meter</div>
         <div class="subtitle">Average LiDAR sector dirtiness</div>
       </div>
-
-      <canvas id="gauge"></canvas>
-
+ 
+      <!-- Gauge canvas with Sus-Rock overlay sitting on top -->
+      <div class="gauge-wrap">
+        <canvas id="gauge"></canvas>
+      </div>
+ 
       <div class="readout">
         <div class="pct" id="pctText">0%</div>
         <div class="pill" id="pill">Clean</div>
         <div class="instance" id="instanceText">Waiting for data</div>
       </div>
-
+ 
       <div class="divider"></div>
-
+ 
       <div class="feature-toggle">
         <div class="toggle-copy">
-          <div class="toggle-title">Junior Minor</div>
-          <div class="toggle-subtitle" id="juniorMinorState">Rock mode off · alerts muted</div>
+          <div class="toggle-title">Rock Mode</div>
         </div>
-
         <label class="switch" aria-label="Toggle Junior Minor rock mode">
           <input type="checkbox" id="juniorMinorToggle" />
           <span class="switch-slider"></span>
         </label>
       </div>
-
-      <div class="slider-section">
-        <div class="slider-label">
-          <span>Manual Override All Sectors</span>
-          <span class="slider-val" id="sliderVal">0</span>
-        </div>
-
-        <input type="range" id="slider" min="0" max="100" value="0" />
-
-        <div class="demo-indicator">
-          <div class="demo-dot"></div>
-          <span class="demo-text" id="modeText">Live mode · polling /api/sectors</span>
-        </div>
+      <div class="rock-display" id="rockDisplay" style="display:none; margin-top: 20px; text-align: center;">
+        <img id="rockImage" src="" alt="Rock status" style="width: 80%; border-radius: 12px; object-fit: contain;" />
       </div>
     </div>
-
+ 
+    <!-- ── MIDDLE CARD: Radar + sector stats (2/5) ───────────────────────────── -->
     <div class="card radar-card">
       <div class="header">
-        <div class="title">LiDAR 360° Dirt Sector View</div>
-        <div class="subtitle">5-sector view from ROS dirt percentage array</div>
+        <div class="title">LiDAR 360° Sector View</div>
+        <div class="subtitle">Striped grey area shows dirty portion of each sector</div>
       </div>
-
+ 
       <canvas id="radar"></canvas>
-
-      <div class="radar-status" id="radarStatus">
-        Waiting for sector data
-      </div>
-
+ 
+      <div class="radar-status" id="radarStatus">Waiting for sector data</div>
+ 
       <div class="radar-summary">
         <div class="summary-box">
           <span>Dirtiest Sector</span>
@@ -525,7 +508,7 @@
           <strong id="criticalCount">0 / 5</strong>
         </div>
       </div>
-
+ 
       <div class="sector-grid">
         <div class="sector-item">
           <span class="name">S1</span>
@@ -548,81 +531,64 @@
           <span class="value" id="sector5Value">-</span>
         </div>
       </div>
-
-      <div class="small-note">
-        White area = clean/usable portion · Striped grey area = dirty portion · Each sector receives one value from ROS
-      </div>
     </div>
-
-    <div class="card rock-card is-hidden" id="rockCard">
+ 
+    <!-- ── RIGHT CARD: Placeholder (2/5) ─────────────────────────────────────── -->
+    <div class="card pointcloud-card">
       <div class="header">
-        <div class="title">Rock Status</div>
-        <div class="subtitle">Junior Minor reaction mode</div>
+        <div class="title">3D Point Cloud</div>
+        <div class="subtitle">Live LiDAR view · 30 cm radius</div>
       </div>
-
-      <div class="rock-wrap">
-        <div class="rock-image-frame">
-          <img id="rockImage" src="{{ url_for('static', filename='sound/happyrock.jpg') }}" alt="Rock status" />
-        </div>
-
-        <div class="rock-status-pill" id="rockStatusPill">Happy Rock</div>
-
-        <div class="rock-level-box">
-          <span>Current Reaction Trigger</span>
-          <strong id="rockLevelText">Clean</strong>
-        </div>
-
-        <div class="rock-caption" id="rockCaption">
-          Dirt levels are low. Rock is calm.
-        </div>
-      </div>
+      <div id="pointcloudContainer" style="flex:1; width:100%; border-radius:12px; overflow:hidden;"></div>
     </div>
-
+ 
   </div>
-
+ 
   <script>
-    const DEMO_MODE = false;
+    // ── Configuration constants ─────────────────────────────────────────────────
+    const DEMO_MODE                  = false;
     const SEND_DEMO_VALUES_TO_BACKEND = true;
-
-    const N_SECTORS = 5;
-    const CRITICAL_DIRT_PERCENT = 90;
-    const WARNING_DIRT_PERCENT = 50;
-    const OVERALL_DIRTINESS_MODE = 'average';
-
-    const DEMO_INSTANCE_COUNT = 200;
+ 
+    const N_SECTORS              = 5;
+    const CRITICAL_DIRT_PERCENT  = 80;   // ← change this to adjust Sus Rock trigger
+    const WARNING_DIRT_PERCENT   = 30;
+ 
+    const OVERALL_DIRTINESS_MODE = 'average'; // 'average' | 'max'
+ 
+    const DEMO_INSTANCE_COUNT    = 200;
     const DEMO_INSTANCE_EVERY_MS = 1000;
-    const ANIMATION_DURATION_MS = 650;
+    const ANIMATION_DURATION_MS  = 650;
     const BACKEND_POLL_INTERVAL_MS = 500;
-
+ 
     const ASSET_PATHS = {
-      happy: "{{ url_for('static', filename='sound/happyrock.jpg') }}",
-      mid: "{{ url_for('static', filename='sound/midrock.jpg') }}",
-      sus: "{{ url_for('static', filename='sound/susrock.png') }}",
+      happy:   "{{ url_for('static', filename='sound/happyrock.jpg') }}",
+      mid:     "{{ url_for('static', filename='sound/midrock.jpg') }}",
+      sus:     "{{ url_for('static', filename='sound/susrock.jpg') }}",
       blocked: "{{ url_for('static', filename='sound/blocked.mp3') }}"
     };
-
-    const W = 312;
-    const SIDE_PAD = 22;
+ 
+    // ── Gauge setup ─────────────────────────────────────────────────────────────
+    const W          = Math.min(260, window.innerWidth * 0.18);
+    const SIDE_PAD   = 22;
     const LABEL_MARGIN = 20;
     const BOTTOM_PAD = 20;
-    const R = W / 2 - SIDE_PAD;
-    const CX = W / 2;
-    const H = LABEL_MARGIN + R + BOTTOM_PAD;
-    const CY = LABEL_MARGIN + R;
-
+    const R          = W / 2 - SIDE_PAD;
+    const CX         = W / 2;
+    const H          = LABEL_MARGIN + R + BOTTOM_PAD;
+    const CY         = LABEL_MARGIN + R;
+ 
     const canvas = document.getElementById('gauge');
-    const ctx = canvas.getContext('2d');
-    canvas.width = W;
+    const ctx    = canvas.getContext('2d');
+    canvas.width  = W;
     canvas.height = H;
-
-    const C_GREEN = { r: 34, g: 197, b: 94 };
-    const C_YELLOW = { r: 245, g: 158, b: 11 };
-    const C_RED = { r: 239, g: 68, b: 68 };
-
-    function clamp(value, min, max) {
-      return Math.max(min, Math.min(max, value));
-    }
-
+ 
+    // Colour helpers
+    const C_GREEN  = { r: 34,  g: 197, b: 94  };
+    const C_YELLOW = { r: 245, g: 158, b: 11  };
+    const C_RED    = { r: 239, g: 68,  b: 68  };
+ 
+    function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+ 
     function lerpRGB(a, b, t) {
       return {
         r: Math.round(a.r + (b.r - a.r) * t),
@@ -630,357 +596,268 @@
         b: Math.round(a.b + (b.b - a.b) * t),
       };
     }
-
+ 
     function gradientColor(t) {
       const c = t <= 0.5
-        ? lerpRGB(C_GREEN, C_YELLOW, t / 0.5)
-        : lerpRGB(C_YELLOW, C_RED, (t - 0.5) / 0.5);
-
+        ? lerpRGB(C_GREEN,  C_YELLOW, t / 0.5)
+        : lerpRGB(C_YELLOW, C_RED,    (t - 0.5) / 0.5);
       return `rgb(${c.r},${c.g},${c.b})`;
     }
-
-    function getValueColor(v) {
-      return gradientColor(v / 100);
-    }
-
+ 
+    function getValueColor(v)  { return gradientColor(v / 100); }
+ 
     function getPillStyle(v) {
-      if (v < 30) {
-        return { bg: '#dcfce7', fg: '#15803d', label: 'Clean' };
-      }
-
-      if (v < 70) {
-        return { bg: '#fef3c7', fg: '#b45309', label: 'Partially Dirty' };
-      }
-
-      return { bg: '#fee2e2', fg: '#b91c1c', label: 'Very Dirty' };
+      if (v < 30) return { bg: '#dcfce7', fg: '#15803d', label: 'Clean' };
+      if (v < 70) return { bg: '#fef3c7', fg: '#b45309', label: 'Partially Dirty' };
+      return           { bg: '#fee2e2', fg: '#b91c1c', label: 'Very Dirty' };
     }
-
-    function valueToAngle(v) {
-      return Math.PI * (1 - v / 100);
-    }
-
-    const TICK_COUNT = 101;
-    const TICK_LEN = 13;
-    const TICK_GAP = 2;
-    const TICK_W_ON = 3.5;
-    const TICK_W_OFF = 2;
-    const LABEL_DIST = R + 16;
-
+ 
+    function valueToAngle(v) { return Math.PI * (1 - v / 100); }
+ 
+    const TICK_COUNT  = 101;
+    const TICK_LEN    = 13;
+    const TICK_GAP    = 2;
+    const TICK_W_ON   = 3.5;
+    const TICK_W_OFF  = 2;
+    const LABEL_DIST  = R + 16;
+ 
     function drawGauge(value) {
       ctx.clearRect(0, 0, W, H);
-
+ 
       for (let i = 0; i < TICK_COUNT; i++) {
-        const t = i / (TICK_COUNT - 1);
+        const t         = i / (TICK_COUNT - 1);
         const tickValue = t * 100;
-        const angle = valueToAngle(tickValue);
-        const active = tickValue <= value;
-
-        const cosA = Math.cos(angle);
-        const sinA = -Math.sin(angle);
-
-        const x1 = CX + (R - TICK_GAP) * cosA;
-        const y1 = CY + (R - TICK_GAP) * sinA;
-        const x2 = CX + (R - TICK_GAP - TICK_LEN) * cosA;
-        const y2 = CY + (R - TICK_GAP - TICK_LEN) * sinA;
-
+        const angle     = valueToAngle(tickValue);
+        const active    = tickValue <= value;
+        const cosA      = Math.cos(angle);
+        const sinA      = -Math.sin(angle);
+ 
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-
-        ctx.lineWidth = active ? TICK_W_ON : TICK_W_OFF;
-        ctx.lineCap = 'round';
+        ctx.moveTo(CX + (R - TICK_GAP)            * cosA, CY + (R - TICK_GAP)            * sinA);
+        ctx.lineTo(CX + (R - TICK_GAP - TICK_LEN) * cosA, CY + (R - TICK_GAP - TICK_LEN) * sinA);
+        ctx.lineWidth   = active ? TICK_W_ON  : TICK_W_OFF;
+        ctx.lineCap     = 'round';
         ctx.strokeStyle = active ? gradientColor(t) : '#dde1e9';
         ctx.stroke();
       }
-
-      ctx.font = '500 10.5px "DM Sans", Arial, sans-serif';
-      ctx.fillStyle = '#9aa0ae';
+ 
+      ctx.font         = '500 10.5px "DM Sans", Arial, sans-serif';
+      ctx.fillStyle    = '#9aa0ae';
       ctx.textBaseline = 'middle';
-
-      [
-        { v: 0, text: '0' },
-        { v: 25, text: '25' },
-        { v: 50, text: '50' },
-        { v: 75, text: '75' },
-        { v: 100, text: '100' },
-      ].forEach(({ v, text }) => {
+ 
+      [{ v: 0, text: '0' }, { v: 25, text: '25' }, { v: 50, text: '50' },
+       { v: 75, text: '75' }, { v: 100, text: '100' }].forEach(({ v, text }) => {
         const angle = valueToAngle(v);
-        const lx = CX + LABEL_DIST * Math.cos(angle);
-        const ly = CY - LABEL_DIST * Math.sin(angle);
-
         ctx.textAlign = v === 50 ? 'center' : v < 50 ? 'right' : 'left';
-        ctx.fillText(text, lx, ly);
+        ctx.fillText(text, CX + LABEL_DIST * Math.cos(angle), CY - LABEL_DIST * Math.sin(angle));
       });
     }
-
-    const pctText = document.getElementById('pctText');
-    const pill = document.getElementById('pill');
-    const slider = document.getElementById('slider');
-    const sliderVal = document.getElementById('sliderVal');
+ 
+    // ── DOM refs ────────────────────────────────────────────────────────────────
+    const pctText      = document.getElementById('pctText');
+    const pill         = document.getElementById('pill');
     const instanceText = document.getElementById('instanceText');
-    const modeText = document.getElementById('modeText');
-
+ 
+    // Manual override elements — may be null if the override block is removed
+    const slider    = document.getElementById('slider');
+    const sliderVal = document.getElementById('sliderVal');
+    const modeText  = document.getElementById('modeText');
+ 
+    // ── Radar setup ─────────────────────────────────────────────────────────────
     const radarCanvas = document.getElementById('radar');
-    const radarCtx = radarCanvas.getContext('2d');
-
-    const RADAR_W = 360;
-    const RADAR_H = 360;
-    const RADAR_CX = RADAR_W / 2;
-    const RADAR_CY = RADAR_H / 2;
-    const RADAR_RADIUS = 145;
-    const RADAR_START_DEG = -90;
-    const SECTOR_SIZE_DEG = 360 / N_SECTORS;
-
-    radarCanvas.width = RADAR_W;
+    const radarCtx    = radarCanvas.getContext('2d');
+ 
+    const RADAR_SIZE   = Math.min(300, window.innerWidth * 0.22);
+    const RADAR_W      = RADAR_SIZE;
+    const RADAR_H      = RADAR_SIZE + 30;
+    const RADAR_CX     = RADAR_W / 2;
+    const RADAR_CY     = RADAR_H / 2;
+    const RADAR_RADIUS = RADAR_SIZE * 0.45;
+    const RADAR_START_DEG  = -90;
+    const SECTOR_SIZE_DEG  = 360 / N_SECTORS;
+ 
+    radarCanvas.width  = RADAR_W;
     radarCanvas.height = RADAR_H;
-
-    const radarStatus = document.getElementById('radarStatus');
+ 
+    const radarStatus      = document.getElementById('radarStatus');
     const dirtiestSectorEl = document.getElementById('dirtiestSector');
-    const criticalCountEl = document.getElementById('criticalCount');
-
+    const criticalCountEl  = document.getElementById('criticalCount');
+ 
     const sectorValueEls = [
       document.getElementById('sector1Value'),
       document.getElementById('sector2Value'),
       document.getElementById('sector3Value'),
       document.getElementById('sector4Value'),
-      document.getElementById('sector5Value')
+      document.getElementById('sector5Value'),
     ];
-
-    function degToRad(deg) {
-      return deg * Math.PI / 180;
-    }
-
+ 
+    function degToRad(deg) { return deg * Math.PI / 180; }
+ 
     function percentToCleanRadius(dirtPercent) {
       return RADAR_RADIUS * (1 - clamp(dirtPercent, 0, 100) / 100);
     }
-
+ 
     function createBlockedPattern() {
-      const patternCanvas = document.createElement('canvas');
-      const pctx = patternCanvas.getContext('2d');
-
-      patternCanvas.width = 10;
-      patternCanvas.height = 10;
-
+      const pc   = document.createElement('canvas');
+      const pctx = pc.getContext('2d');
+      pc.width   = 10;
+      pc.height  = 10;
       pctx.fillStyle = '#dde2e8';
       pctx.fillRect(0, 0, 10, 10);
-
       pctx.strokeStyle = '#bcc4cf';
-      pctx.lineWidth = 1.4;
-      pctx.lineCap = 'round';
-
-      const slashes = [
-        [1, 8, 4, 5],
-        [6, 8, 9, 5],
-        [1, 3, 4, 0],
-        [6, 3, 9, 0]
-      ];
-
-      slashes.forEach(([x1, y1, x2, y2]) => {
-        pctx.beginPath();
-        pctx.moveTo(x1, y1);
-        pctx.lineTo(x2, y2);
-        pctx.stroke();
+      pctx.lineWidth   = 1.4;
+      pctx.lineCap     = 'round';
+      [[1,8,4,5],[6,8,9,5],[1,3,4,0],[6,3,9,0]].forEach(([x1,y1,x2,y2]) => {
+        pctx.beginPath(); pctx.moveTo(x1,y1); pctx.lineTo(x2,y2); pctx.stroke();
       });
-
-      return radarCtx.createPattern(patternCanvas, 'repeat');
+      return radarCtx.createPattern(pc, 'repeat');
     }
-
+ 
     const blockedPattern = createBlockedPattern();
-
+ 
     function normalizeSectorValues(values) {
-      const cleanValues = Array.isArray(values) ? values.slice(0, N_SECTORS) : [];
-
-      while (cleanValues.length < N_SECTORS) {
-        cleanValues.push(0);
-      }
-
-      return cleanValues.map(value => clamp(Number(value) || 0, 0, 100));
+      const out = Array.isArray(values) ? values.slice(0, N_SECTORS) : [];
+      while (out.length < N_SECTORS) out.push(0);
+      return out.map(v => clamp(Number(v) || 0, 0, 100));
     }
-
+ 
     function calculateOverallDirtiness(sectorValues) {
       const values = normalizeSectorValues(sectorValues);
-
-      if (OVERALL_DIRTINESS_MODE === 'max') {
-        return Math.max(...values);
-      }
-
-      return values.reduce((sum, value) => sum + value, 0) / values.length;
+      if (OVERALL_DIRTINESS_MODE === 'max') return Math.max(...values);
+      return values.reduce((sum, v) => sum + v, 0) / values.length;
     }
-
+ 
     function createSegmentsFromSectorValues(sectorValues) {
-      const values = normalizeSectorValues(sectorValues);
-
-      return values.map((dirtPercent, index) => {
-        const startDeg = RADAR_START_DEG + index * SECTOR_SIZE_DEG;
-        const endDeg = startDeg + SECTOR_SIZE_DEG;
-
-        return {
-          name: `S${index + 1}`,
-          index,
-          startDeg,
-          endDeg,
-          dirtPercent
-        };
-      });
+      return normalizeSectorValues(sectorValues).map((dirtPercent, index) => ({
+        name:       `S${index + 1}`,
+        index,
+        startDeg:   RADAR_START_DEG + index * SECTOR_SIZE_DEG,
+        endDeg:     RADAR_START_DEG + (index + 1) * SECTOR_SIZE_DEG,
+        dirtPercent
+      }));
     }
-
-    function drawSectorRing(startRad, endRad, innerRadius, outerRadius, fillStyle) {
-      if (outerRadius <= innerRadius) return;
-
+ 
+    function drawSectorRing(startRad, endRad, innerR, outerR, fill) {
+      if (outerR <= innerR) return;
       radarCtx.beginPath();
-      radarCtx.arc(RADAR_CX, RADAR_CY, outerRadius, startRad, endRad);
-      radarCtx.arc(RADAR_CX, RADAR_CY, innerRadius, endRad, startRad, true);
+      radarCtx.arc(RADAR_CX, RADAR_CY, outerR, startRad, endRad);
+      radarCtx.arc(RADAR_CX, RADAR_CY, innerR, endRad, startRad, true);
       radarCtx.closePath();
-
-      radarCtx.fillStyle = fillStyle;
+      radarCtx.fillStyle = fill;
       radarCtx.fill();
     }
-
-    function drawFullSector(startRad, endRad, fillStyle) {
+ 
+    function drawFullSector(startRad, endRad, fill) {
       radarCtx.beginPath();
       radarCtx.moveTo(RADAR_CX, RADAR_CY);
       radarCtx.arc(RADAR_CX, RADAR_CY, RADAR_RADIUS, startRad, endRad);
       radarCtx.closePath();
-
-      radarCtx.fillStyle = fillStyle;
+      radarCtx.fillStyle = fill;
       radarCtx.fill();
     }
-
+ 
     function drawSegmentBase(segment) {
-      const startRad = degToRad(segment.startDeg);
-      const endRad = degToRad(segment.endDeg);
+      const startRad   = degToRad(segment.startDeg);
+      const endRad     = degToRad(segment.endDeg);
       const cleanRadius = percentToCleanRadius(segment.dirtPercent);
-
       drawFullSector(startRad, endRad, '#ffffff');
-
       if (segment.dirtPercent >= 99.9) {
         drawFullSector(startRad, endRad, blockedPattern);
       } else if (segment.dirtPercent > 0) {
         drawSectorRing(startRad, endRad, cleanRadius, RADAR_RADIUS, blockedPattern);
       }
     }
-
+ 
     function drawRangeRings() {
       radarCtx.save();
       radarCtx.strokeStyle = 'rgba(148, 163, 184, 0.40)';
-      radarCtx.lineWidth = 1.15;
-
-      [25, 50, 75, 100].forEach(percent => {
-        const r = RADAR_RADIUS * (percent / 100);
-
+      radarCtx.lineWidth   = 1.15;
+      [25, 50, 75, 100].forEach(pct => {
         radarCtx.beginPath();
-        radarCtx.arc(RADAR_CX, RADAR_CY, r, 0, Math.PI * 2);
+        radarCtx.arc(RADAR_CX, RADAR_CY, RADAR_RADIUS * (pct / 100), 0, Math.PI * 2);
         radarCtx.stroke();
       });
-
       radarCtx.restore();
     }
-
+ 
     function drawSegmentDividerLines() {
       radarCtx.save();
-
       radarCtx.strokeStyle = '#d8dee9';
-      radarCtx.lineWidth = 2;
-      radarCtx.lineCap = 'round';
-
+      radarCtx.lineWidth   = 2;
+      radarCtx.lineCap     = 'round';
       for (let i = 0; i < N_SECTORS; i++) {
-        const deg = RADAR_START_DEG + i * SECTOR_SIZE_DEG;
-        const angle = degToRad(deg);
-
+        const angle = degToRad(RADAR_START_DEG + i * SECTOR_SIZE_DEG);
         radarCtx.beginPath();
         radarCtx.moveTo(RADAR_CX, RADAR_CY);
-        radarCtx.lineTo(
-          RADAR_CX + Math.cos(angle) * RADAR_RADIUS,
-          RADAR_CY + Math.sin(angle) * RADAR_RADIUS
-        );
+        radarCtx.lineTo(RADAR_CX + Math.cos(angle) * RADAR_RADIUS,
+                        RADAR_CY + Math.sin(angle) * RADAR_RADIUS);
         radarCtx.stroke();
       }
-
       radarCtx.restore();
     }
-
+ 
     function drawOuterCircle() {
       radarCtx.save();
-
       radarCtx.beginPath();
       radarCtx.arc(RADAR_CX, RADAR_CY, RADAR_RADIUS, 0, Math.PI * 2);
-      radarCtx.lineWidth = 2;
+      radarCtx.lineWidth   = 2;
       radarCtx.strokeStyle = '#d8dee9';
       radarCtx.stroke();
-
       radarCtx.restore();
     }
-
+ 
     function drawPercentLabels() {
       radarCtx.save();
-
-      radarCtx.font = '600 9px "DM Sans", Arial, sans-serif';
-      radarCtx.fillStyle = '#8b95a5';
+      radarCtx.font         = '600 9px "DM Sans", Arial, sans-serif';
+      radarCtx.fillStyle    = '#8b95a5';
       radarCtx.textBaseline = 'middle';
-
-      [25, 50, 75, 100].forEach(percent => {
-        const r = RADAR_RADIUS * (percent / 100);
-        const text = `${percent}%`;
-
-        radarCtx.textAlign = 'left';
-        radarCtx.fillText(text, RADAR_CX + 6, RADAR_CY - r + 10);
+      radarCtx.textAlign    = 'left';
+      [25, 50, 75, 100].forEach(pct => {
+        const r = RADAR_RADIUS * (pct / 100);
+        radarCtx.fillText(`${pct}%`, RADAR_CX + 6, RADAR_CY - r + 9);
       });
-
       radarCtx.restore();
     }
-
+ 
     function drawCenterSensor() {
       radarCtx.save();
-
       radarCtx.beginPath();
-      radarCtx.arc(RADAR_CX, RADAR_CY, 24, 0, Math.PI * 2);
+      radarCtx.arc(RADAR_CX, RADAR_CY, 22, 0, Math.PI * 2);
       radarCtx.fillStyle = '#ffffff';
       radarCtx.fill();
-
-      radarCtx.lineWidth = 2;
+      radarCtx.lineWidth   = 2;
       radarCtx.strokeStyle = '#d8dee9';
       radarCtx.stroke();
-
       radarCtx.beginPath();
-      radarCtx.arc(RADAR_CX, RADAR_CY, 6, 0, Math.PI * 2);
+      radarCtx.arc(RADAR_CX, RADAR_CY, 5, 0, Math.PI * 2);
       radarCtx.fillStyle = '#1f2937';
       radarCtx.fill();
-
-      radarCtx.font = '600 9px "DM Sans", Arial, sans-serif';
-      radarCtx.fillStyle = '#64748b';
-      radarCtx.textAlign = 'center';
+      radarCtx.font         = '600 8px "DM Sans", Arial, sans-serif';
+      radarCtx.fillStyle    = '#64748b';
+      radarCtx.textAlign    = 'center';
       radarCtx.textBaseline = 'middle';
-      radarCtx.fillText('LiDAR', RADAR_CX, RADAR_CY + 16);
-
+      radarCtx.fillText('LiDAR', RADAR_CX, RADAR_CY + 14);
       radarCtx.restore();
     }
-
+ 
     function drawSectorNumbers(segments) {
       radarCtx.save();
-
-      radarCtx.font = '700 11px "DM Sans", Arial, sans-serif';
-      radarCtx.fillStyle = '#475569';
-      radarCtx.textAlign = 'center';
+      radarCtx.font         = '700 10px "DM Sans", Arial, sans-serif';
+      radarCtx.fillStyle    = '#475569';
+      radarCtx.textAlign    = 'center';
       radarCtx.textBaseline = 'middle';
-
-      segments.forEach(segment => {
-        const midDeg = (segment.startDeg + segment.endDeg) / 2;
-        const angle = degToRad(midDeg);
-        const labelRadius = RADAR_RADIUS + 19;
-
-        radarCtx.fillText(
-          segment.name,
-          RADAR_CX + Math.cos(angle) * labelRadius,
-          RADAR_CY + Math.sin(angle) * labelRadius
-        );
+      segments.forEach(seg => {
+        const midDeg      = (seg.startDeg + seg.endDeg) / 2;
+        const labelRadius = RADAR_RADIUS + 16;
+        radarCtx.fillText(seg.name,
+          RADAR_CX + Math.cos(degToRad(midDeg)) * labelRadius,
+          RADAR_CY + Math.sin(degToRad(midDeg)) * labelRadius);
       });
-
       radarCtx.restore();
     }
-
+ 
     function drawRadar(segments) {
       radarCtx.clearRect(0, 0, RADAR_W, RADAR_H);
-
       segments.forEach(drawSegmentBase);
       drawRangeRings();
       drawSegmentDividerLines();
@@ -989,291 +866,351 @@
       drawCenterSensor();
       drawSectorNumbers(segments);
     }
-
+ 
     function updateRadarInfo(segments) {
-      const dirtValues = segments.map(segment => segment.dirtPercent);
-      const maxDirt = Math.max(...dirtValues);
-      const maxIndex = dirtValues.indexOf(maxDirt);
-      const criticalCount = dirtValues.filter(value => value >= CRITICAL_DIRT_PERCENT).length;
-
+      const dirtValues   = segments.map(s => s.dirtPercent);
+      const maxDirt      = Math.max(...dirtValues);
+      const maxIndex     = dirtValues.indexOf(maxDirt);
+      const criticalCount = dirtValues.filter(v => v >= CRITICAL_DIRT_PERCENT).length;
+ 
       dirtiestSectorEl.textContent = `S${maxIndex + 1} · ${maxDirt.toFixed(1)}%`;
-      criticalCountEl.textContent = `${criticalCount} / ${N_SECTORS}`;
-
-      sectorValueEls.forEach((el, index) => {
-        el.textContent = `${dirtValues[index].toFixed(1)}%`;
+      criticalCountEl.textContent  = `${criticalCount} / ${N_SECTORS}`;
+ 
+      sectorValueEls.forEach((el, i) => {
+        el.textContent = `${dirtValues[i].toFixed(1)}%`;
       });
-
+ 
       if (criticalCount > 0) {
-        radarStatus.textContent = 'Critical dirt level detected';
-        radarStatus.style.background = '#fee2e2';
-        radarStatus.style.color = '#b91c1c';
+        radarStatus.textContent        = 'Critical dirt level detected';
+        radarStatus.style.background   = '#fee2e2';
+        radarStatus.style.color        = '#b91c1c';
       } else if (maxDirt >= WARNING_DIRT_PERCENT) {
-        radarStatus.textContent = 'Dirt level elevated';
-        radarStatus.style.background = '#fef3c7';
-        radarStatus.style.color = '#b45309';
+        radarStatus.textContent        = 'Sensor level elevated';
+        radarStatus.style.background   = '#fef3c7';
+        radarStatus.style.color        = '#b45309';
       } else {
-        radarStatus.textContent = 'Dirt levels mostly clean';
-        radarStatus.style.background = '#dcfce7';
-        radarStatus.style.color = '#15803d';
+        radarStatus.textContent        = 'Sensor levels mostly clean';
+        radarStatus.style.background   = '#dcfce7';
+        radarStatus.style.color        = '#15803d';
       }
     }
-
+ 
     function updateRadarFromSectorValues(sectorValues) {
       const segments = createSegmentsFromSectorValues(sectorValues);
       drawRadar(segments);
       updateRadarInfo(segments);
       return segments;
     }
-
-    const rockCard = document.getElementById('rockCard');
-    const juniorMinorToggle = document.getElementById('juniorMinorToggle');
-    const juniorMinorState = document.getElementById('juniorMinorState');
-
-    const rockImage = document.getElementById('rockImage');
-    const rockStatusPill = document.getElementById('rockStatusPill');
-    const rockLevelText = document.getElementById('rockLevelText');
-    const rockCaption = document.getElementById('rockCaption');
-
+ 
+    // ── Rock overlay (Sus Rock only) ────────────────────────────────────────────
+    const rockDisplay = document.getElementById('rockDisplay');
+    const rockImage   = document.getElementById('rockImage');
+    const juniorMinorToggle = document.getElementById('juniorMinorToggle'); 
     const blockedAlertSound = new Audio(ASSET_PATHS.blocked);
     blockedAlertSound.volume = 0.75;
-
+ 
     let juniorMinorEnabled = false;
-    let soundEnabled = false;
-    let wasCritical = false;
-
+    let soundEnabled       = false;
+    let wasCritical        = false;
+ 
     async function unlockBlockedSound() {
       try {
         blockedAlertSound.currentTime = 0;
         blockedAlertSound.muted = true;
-
         await blockedAlertSound.play();
-
         blockedAlertSound.pause();
         blockedAlertSound.currentTime = 0;
         blockedAlertSound.muted = false;
-      } catch (error) {
+      } catch (e) {
         blockedAlertSound.muted = false;
-        console.log('Audio unlock failed:', error);
+        console.log('Audio unlock failed:', e);
       }
     }
-
-    juniorMinorToggle.addEventListener('change', async () => {
-      juniorMinorEnabled = juniorMinorToggle.checked;
-      soundEnabled = juniorMinorEnabled;
-      wasCritical = false;
-
-      if (juniorMinorEnabled) {
-        rockCard.classList.remove('is-hidden');
-        juniorMinorState.textContent = 'Rock mode on · sound alerts enabled';
-
-        await unlockBlockedSound();
-
-        const segments = createSegmentsFromSectorValues(currentSectorValues);
-        updateRockStatus(segments);
-      } else {
-        rockCard.classList.add('is-hidden');
-        juniorMinorState.textContent = 'Rock mode off · alerts muted';
-
-        blockedAlertSound.pause();
-        blockedAlertSound.currentTime = 0;
-      }
-    });
-
+ 
     function playCriticalSound() {
       if (!soundEnabled) return;
-
       blockedAlertSound.currentTime = 0;
-      blockedAlertSound.play().catch(error => {
-        console.log('Could not play alert sound:', error);
-      });
+      blockedAlertSound.play().catch(e => console.log('Could not play alert sound:', e));
     }
-
+ 
     function updateRockStatus(segments) {
       if (!juniorMinorEnabled) {
+        rockDisplay.style.display = 'none';
         wasCritical = false;
         return;
       }
 
-      const maxDirt = Math.max(...segments.map(segment => segment.dirtPercent));
+      const maxDirt  = Math.max(...segments.map(s => s.dirtPercent));
       const critical = maxDirt >= CRITICAL_DIRT_PERCENT;
+
+      rockDisplay.style.display = 'block';
 
       if (critical) {
         rockImage.src = ASSET_PATHS.sus;
-        rockStatusPill.textContent = 'Sus Rock';
-        rockStatusPill.style.background = '#fee2e2';
-        rockStatusPill.style.color = '#b91c1c';
-        rockLevelText.textContent = `≥ ${CRITICAL_DIRT_PERCENT}%`;
-        rockCaption.textContent = 'Critical dirt level detected. Rock is judging the operator.';
-
-        if (!wasCritical) {
-          playCriticalSound();
-        }
-
+      if (!wasCritical) playCriticalSound();
         wasCritical = true;
-        return;
-      }
-
-      wasCritical = false;
-
-      if (maxDirt >= WARNING_DIRT_PERCENT) {
+      } else if (maxDirt >= WARNING_DIRT_PERCENT) {
         rockImage.src = ASSET_PATHS.mid;
-        rockStatusPill.textContent = 'Mid Rock';
-        rockStatusPill.style.background = '#fef3c7';
-        rockStatusPill.style.color = '#b45309';
-        rockLevelText.textContent = `≥ ${WARNING_DIRT_PERCENT}%`;
-        rockCaption.textContent = 'Dirt is getting worse. Rock is no longer impressed.';
-        return;
+        wasCritical = false;
+      } else {
+        rockImage.src = ASSET_PATHS.happy;
+        wasCritical = false;
       }
-
-      rockImage.src = ASSET_PATHS.happy;
-      rockStatusPill.textContent = 'Happy Rock';
-      rockStatusPill.style.background = '#dcfce7';
-      rockStatusPill.style.color = '#15803d';
-      rockLevelText.textContent = `< ${WARNING_DIRT_PERCENT}%`;
-      rockCaption.textContent = 'Dirt levels are low. Rock is calm.';
     }
+ 
+    juniorMinorToggle.addEventListener('change', async () => {
+      juniorMinorEnabled = juniorMinorToggle.checked;
+      soundEnabled       = juniorMinorEnabled;
+      wasCritical        = false;
 
+      if (juniorMinorEnabled) {
+        await unlockBlockedSound();
+        const segments = createSegmentsFromSectorValues(currentSectorValues);
+        updateRockStatus(segments);
+      } else {
+        rockDisplay.style.display = 'none';
+        blockedAlertSound.pause();
+        blockedAlertSound.currentTime = 0;
+      }
+    });
+    // ── Core data + animation ───────────────────────────────────────────────────
     let currentSectorValues = [0, 0, 0, 0, 0];
-    let animationFrameId = null;
-
+    let animationFrameId    = null;
+ 
     function applySectorValues(values) {
-      const sectorValues = normalizeSectorValues(values);
+      const sectorValues  = normalizeSectorValues(values);
       currentSectorValues = sectorValues;
-
-      const overallValue = calculateOverallDirtiness(sectorValues);
-      const roundedValue = Math.round(overallValue);
-
+ 
+      const overallValue  = calculateOverallDirtiness(sectorValues);
+      const roundedValue  = Math.round(overallValue);
+ 
       drawGauge(overallValue);
-
-      pctText.textContent = roundedValue + '%';
-      pctText.style.color = getValueColor(overallValue);
-
+      pctText.textContent  = roundedValue + '%';
+      pctText.style.color  = getValueColor(overallValue);
+ 
       const ps = getPillStyle(roundedValue);
-      pill.textContent = ps.label;
+      pill.textContent    = ps.label;
       pill.style.background = ps.bg;
-      pill.style.color = ps.fg;
-
-      slider.value = roundedValue;
-      sliderVal.textContent = roundedValue;
-
+      pill.style.color      = ps.fg;
+ 
+      // Update manual override slider if it exists
+      if (slider)    slider.value         = roundedValue;
+      if (sliderVal) sliderVal.textContent = roundedValue;
+ 
       const segments = updateRadarFromSectorValues(sectorValues);
       updateRockStatus(segments);
     }
-
-    async function postSectorValues(values) {
-      try {
-        await fetch('/api/sectors', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sectors: normalizeSectorValues(values) }),
-        });
-      } catch (error) {
-        console.log('Could not post sector values to backend:', error);
-      }
-    }
-
-    async function fetchSectorValuesFromBackend() {
-      try {
-        const response = await fetch('/api/sectors');
-        const data = await response.json();
-
-        if (Array.isArray(data.sectors)) {
-          animateToSectorValues(data.sectors);
-        }
-      } catch (error) {
-        console.log('Could not fetch sector values from backend:', error);
-      }
-    }
-
+ 
     function easeInOutCubic(t) {
-      return t < 0.5
-        ? 4 * t * t * t
-        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
     }
-
+ 
     function animateToSectorValues(targetValues) {
-      const cleanTargetValues = normalizeSectorValues(targetValues);
+      const cleanTarget = normalizeSectorValues(targetValues);
       const startValues = currentSectorValues.slice();
-      const startTime = performance.now();
-
-      if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-      }
-
+      const startTime   = performance.now();
+ 
+      if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+ 
       function step(now) {
-        const elapsed = now - startTime;
-        const progress = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
+        const elapsed      = now - startTime;
+        const progress     = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
         const easedProgress = easeInOutCubic(progress);
-
-        const animatedValues = cleanTargetValues.map((target, index) => {
-          return startValues[index] + (target - startValues[index]) * easedProgress;
-        });
-
+        const animatedValues = cleanTarget.map((target, i) =>
+          startValues[i] + (target - startValues[i]) * easedProgress
+        );
         applySectorValues(animatedValues);
-
         if (progress < 1) {
           animationFrameId = requestAnimationFrame(step);
         } else {
-          applySectorValues(cleanTargetValues);
+          applySectorValues(cleanTarget);
           animationFrameId = null;
         }
       }
-
+ 
       animationFrameId = requestAnimationFrame(step);
     }
-
-    const demoSectorValues = Array.from({ length: DEMO_INSTANCE_COUNT }, () => {
-      return Array.from({ length: N_SECTORS }, () => {
-        return Math.floor(Math.random() * 101);
-      });
-    });
-
+ 
+    // ── Backend communication ───────────────────────────────────────────────────
+    async function postSectorValues(values) {
+      try {
+        await fetch('/api/sectors', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ sectors: normalizeSectorValues(values) }),
+        });
+      } catch (e) { console.log('Could not post sector values:', e); }
+    }
+ 
+    async function fetchSectorValuesFromBackend() {
+      try {
+        const response = await fetch('/api/sectors');
+        const data     = await response.json();
+        if (Array.isArray(data.sectors)) animateToSectorValues(data.sectors);
+      } catch (e) { console.log('Could not fetch sector values:', e); }
+    }
+ 
+    // ── Demo mode ───────────────────────────────────────────────────────────────
+    const demoSectorValues = Array.from({ length: DEMO_INSTANCE_COUNT }, () =>
+      Array.from({ length: N_SECTORS }, () => Math.floor(Math.random() * 101))
+    );
     let currentInstanceIndex = 0;
-
+ 
     function showNextDemoInstance() {
       const targetValues = demoSectorValues[currentInstanceIndex];
-
-      instanceText.textContent =
-        `Instance ${currentInstanceIndex + 1} / ${demoSectorValues.length}`;
-
+      instanceText.textContent = `Instance ${currentInstanceIndex + 1} / ${demoSectorValues.length}`;
       animateToSectorValues(targetValues);
-
-      if (SEND_DEMO_VALUES_TO_BACKEND) {
-        postSectorValues(targetValues);
-      }
-
-      currentInstanceIndex++;
-
-      if (currentInstanceIndex >= demoSectorValues.length) {
-        currentInstanceIndex = 0;
-      }
+      if (SEND_DEMO_VALUES_TO_BACKEND) postSectorValues(targetValues);
+      currentInstanceIndex = (currentInstanceIndex + 1) % demoSectorValues.length;
     }
-
-    slider.addEventListener('input', () => {
-      const v = parseInt(slider.value, 10);
-      const values = Array.from({ length: N_SECTORS }, () => v);
-
-      if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-      }
-
-      applySectorValues(values);
-      postSectorValues(values);
-      instanceText.textContent = 'Manual override';
-    });
-
+ 
+    // ── Manual override slider (null-safe — works even if block is deleted) ─────
+    if (slider) {
+      slider.addEventListener('input', () => {
+        const v      = parseInt(slider.value, 10);
+        const values = Array.from({ length: N_SECTORS }, () => v);
+        if (animationFrameId !== null) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+        applySectorValues(values);
+        postSectorValues(values);
+        instanceText.textContent = 'Manual override';
+      });
+    }
+ 
+    // ── Boot ────────────────────────────────────────────────────────────────────
     applySectorValues([0, 0, 0, 0, 0]);
-
+ 
     if (DEMO_MODE) {
-      modeText.textContent = 'Demo mode · animated every second';
+      if (modeText) modeText.textContent = 'Demo mode';
       showNextDemoInstance();
       setInterval(showNextDemoInstance, DEMO_INSTANCE_EVERY_MS);
     } else {
-      modeText.textContent = 'Live mode · polling /api/sectors';
+      if (modeText) modeText.textContent = 'Live mode';
       fetchSectorValuesFromBackend();
       setInterval(fetchSectorValuesFromBackend, BACKEND_POLL_INTERVAL_MS);
     }
+    // ── 3D Point Cloud viewer ───────────────────────────────────────────────────
+
+    const POINTCLOUD_POLL_MS = 200;   // how often to fetch new data (ms)
+    const DISPLAY_RADIUS_M   = 0.30;  // 30 cm display radius
+
+    // Initialise after layout so the container has real dimensions
+    function initPointCloud() {
+      const container = document.getElementById('pointcloudContainer');
+      if (!container.clientWidth || !container.clientHeight) {
+        requestAnimationFrame(initPointCloud);
+        return;
+      }
+
+      const W = container.clientWidth;
+      const H = container.clientHeight;
+
+      // ── Scene ──────────────────────────────────────────────────────────────────
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf8fafc);
+
+      // ── Camera — fixed at 45° elevation, no mouse interaction ─────────────────
+      // Position: 0.6m from origin, 45° up, 45° azimuth
+      const camera = new THREE.PerspectiveCamera(45, W / H, 0.001, 10);
+      camera.position.set(0.3, 0.42, 0.3);
+      camera.lookAt(0, 0, 0);
+
+      // ── Renderer ───────────────────────────────────────────────────────────────
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(W, H);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(renderer.domElement);
+
+      // ── Ground plane grid ──────────────────────────────────────────────────────
+      // 60 cm × 60 cm, 12 divisions = 5 cm per cell
+      const grid = new THREE.GridHelper(0.6, 12, 0x94a3b8, 0xdde1e9);
+      scene.add(grid);
+
+      // ── Axis marker at LiDAR origin (small sphere) ────────────────────────────
+      const originGeo = new THREE.SphereGeometry(0.005, 8, 8);
+      const originMat = new THREE.MeshBasicMaterial({ color: 0x6366f1 });
+      scene.add(new THREE.Mesh(originGeo, originMat));
+
+      // ── Point cloud objects ────────────────────────────────────────────────────
+      function makePointCloud(color) {
+        const geo = new THREE.BufferGeometry();
+        // Start with a dummy point so Three.js doesn't complain about empty geometry
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, -999, 0]), 3));
+        const mat = new THREE.PointsMaterial({ color, size: 4, sizeAttenuation: false });
+        const pts = new THREE.Points(geo, mat);
+        scene.add(pts);
+        return pts;
+      }
+
+      const cleanPts = makePointCloud(0x111827); // black
+      const dirtyPts = makePointCloud(0xef4444); // red
+
+      // ROS is Z-up; Three.js is Y-up.
+      // Conversion: three(x, y, z) = ros(x, z, -y)
+      function rosToThree(points) {
+        const arr = new Float32Array(points.length * 3);
+        for (let i = 0; i < points.length; i++) {
+          const [rx, ry, rz] = points[i];
+          arr[i * 3]     = rx;
+          arr[i * 3 + 1] = rz;   // ROS Z → Three.js Y (up)
+          arr[i * 3 + 2] = -ry;  // ROS Y → Three.js -Z
+        }
+        return arr;
+      }
+
+      function updatePointCloud(pointsObj, points) {
+        const arr = points.length > 0
+          ? rosToThree(points)
+          : new Float32Array([0, -999, 0]); // hide dummy below grid
+        pointsObj.geometry.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+        pointsObj.geometry.attributes.position.needsUpdate = true;
+        pointsObj.geometry.computeBoundingSphere();
+      }
+
+      // ── Demo data (used until backend is wired up) ─────────────────────────────
+      function generateDemo() {
+        const clean = [], dirty = [];
+        for (let i = 0; i < 400; i++) {
+          // Random point in a sphere of DISPLAY_RADIUS_M
+          const r     = Math.random() * DISPLAY_RADIUS_M;
+          const theta = Math.random() * Math.PI * 2;
+          const phi   = Math.acos(2 * Math.random() - 1);
+          const x = r * Math.sin(phi) * Math.cos(theta);
+          const y = r * Math.sin(phi) * Math.sin(theta);
+          const z = r * Math.cos(phi);
+          (Math.random() > 0.3 ? clean : dirty).push([x, y, z]);
+        }
+        return { clean, dirty };
+      }
+
+      // ── Polling ────────────────────────────────────────────────────────────────
+      async function fetchAndUpdate() {
+        try {
+          const res  = await fetch('/api/pointcloud');
+          const data = await res.json();
+          if (Array.isArray(data.clean) && Array.isArray(data.dirty)) {
+            updatePointCloud(cleanPts, data.clean);
+            updatePointCloud(dirtyPts, data.dirty);
+            return;
+          }
+        } catch (_) {
+          // backend not ready yet — fall through to demo data
+        }
+        const demo = generateDemo();
+        updatePointCloud(cleanPts, demo.clean);
+        updatePointCloud(dirtyPts, demo.dirty);
+      }
+
+      fetchAndUpdate();
+      setInterval(fetchAndUpdate, POINTCLOUD_POLL_MS);
+
+      // ── Render loop ────────────────────────────────────────────────────────────
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+      animate();
+    }
+    requestAnimationFrame(initPointCloud);
   </script>
 </body>
 </html>
