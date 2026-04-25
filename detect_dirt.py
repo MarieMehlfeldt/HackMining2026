@@ -12,21 +12,20 @@ def find_dirt_perc(frame_coords, frame_reflectivity, frame_coords_pre, threshold
         slice_start = (sector * frame_coords.shape[1]) // n_sectors
         slice_end = ((sector + 1) * frame_coords.shape[1]) // n_sectors
         dist = np.linalg.norm(frame_coords[:, slice_start:slice_end, :], axis=2).flatten()
-        reflect_flat = frame_reflectivity[:, slice_start:slice_end, :].reshape(-1)
+        reflect_flat = frame_reflectivity[:, slice_start:slice_end].reshape(-1)
         if frame_coords_pre.size == 0:
             dirt_mask = (dist < threshold_distance) & (reflect_flat < threshold_reflect)
         else:
             dist_pre = np.linalg.norm(frame_coords_pre[:, slice_start:slice_end, :], axis=2).flatten()
             dist_deriv = dist - dist_pre
             dirt_mask = (dist < threshold_distance) & ((dist_deriv < threshold_deriv) | (reflect_flat < threshold_reflect))
-        perc_dirt[sector]=(np.sum(dirt_mask) / (len(dist)//n_sectors)) * 100 # calculate percentage of dirt points in this sector and append to list
+        perc_dirt[sector]=(np.sum(dirt_mask) / dirt_mask.size) * 100 # calculate percentage of dirt points in this sector and append to list
     return perc_dirt
 
 
 if __name__ == "__main__":
     csv_path = Path("/Users/mariemehlfeldt/Desktop/HackMining2026/data_key.csv")
     df = pd.read_csv(csv_path)
-    n_sectors = 5
 
     for idx in df.index:
         filename = df.loc[idx, "filename"]
@@ -35,42 +34,42 @@ if __name__ == "__main__":
         threshold_distance = 0.10 # threshold distance in meters to consider a point as "dirt"
         threshold_deriv = 0 # threshold for the first derivative of distance to consider a point as "dirt" (e.g., sudden change in distance)
         threshold_reflect = 100 # threshold reflectivity to consider a point as "dirt"
+        n_sectors = 5
         for file_ in folder_path.iterdir():
             if file_.suffix != ".mcap":
                 continue
-            try:
-                data = list(get_lidar_data(file_))
-                coords = [d[0] for d in data]
-                intensity = [d[1] for d in data]
-                reflectivity = [d[2] for d in data]
+            data = list(get_lidar_data(file_))
+            coords = [d[0] for d in data]
+            intensity = [d[1] for d in data]
+            reflectivity = [d[2] for d in data]
 
-                frames_coords = coords
-                frames_reflectivity = reflectivity
+            frames_coords = coords
+            frames_reflectivity = reflectivity
 
-                for frame_idx in range(1, len(frames_coords)):
-                    percentage_dirt = np.zeros((len(frames_coords), n_sectors))
-                    percentage_dirt[frame_idx, :] = find_dirt_perc(frames_coords[frame_idx][:, slice_start:slice_end, :], frames_reflectivity[frame_idx][:, slice_start:slice_end], frames_coords[frame_idx-1][:, slice_start:slice_end, :], threshold_distance, threshold_deriv, threshold_reflect)
+            percentage_dirt = np.zeros((len(frames_coords), n_sectors))
+            for frame_idx in range(1, len(frames_coords)):
+                percentage_dirt[frame_idx, :] = find_dirt_perc(frames_coords[frame_idx], frames_reflectivity[frame_idx], frames_coords[frame_idx-1], threshold_distance, threshold_deriv, threshold_reflect, n_sectors)
 
-                for sector in range(n_sectors):
-                    # write results into csv file
-                    if f"dirt_percentage_sector_{sector}" not in df.columns:
-                        df[f"dirt_percentage_sector_{sector}"] = np.nan
-                    df.loc[idx, f"dirt_percentage_sector_{sector}"] = np.mean(percentage_dirt)
-                    print (f"Analyzed sector {sector + 1}/{n_sectors}")
-                    print (f"Mean percentage of dirt across all frames: {np.mean(percentage_dirt):.2f}%")
-                    print (f"Maximum percentage of dirt in any frame: {np.max(percentage_dirt):.2f}%")
-                    print (f"Minimum percentage of dirt in any frame: {np.min(percentage_dirt):.2f}%")
-                    print (f"Standard deviation of percentage of dirt across all frames: {np.std(percentage_dirt):.2f}%")
+            for sector in range(n_sectors):
+                # write results into csv file
+                if f"dirt_percentage_sector_{sector}" not in df.columns:
+                    df[f"dirt_percentage_sector_{sector}"] = np.nan
+                df.loc[idx, f"dirt_percentage_sector_{sector}"] = np.mean(percentage_dirt[:, sector])
+                print (f"Analyzed sector {sector + 1}/{n_sectors}")
+                print (f"Mean percentage of dirt across all frames: {np.mean(percentage_dirt[:, sector]):.2f}%")
+                print (f"Maximum percentage of dirt in any frame: {np.max(percentage_dirt[:, sector]):.2f}%")
+                print (f"Minimum percentage of dirt in any frame: {np.min(percentage_dirt[:, sector]):.2f}%")
+                print (f"Standard deviation of percentage of dirt across all frames: {np.std(percentage_dirt[:, sector]):.2f}%")
 
-                    if f"mean_reflectivity_sector_{sector}" not in df.columns:
-                        df[f"mean_reflectivity_sector_{sector}"] = np.nan
-                    df.loc[idx, f"mean_reflectivity_sector_{sector}"] = np.mean(reflect_all)
-                    print (f"Mean reflectivity: {np.mean(reflect_all):.2f}")
-                    print (f"Max reflectivity: {np.max(reflect_all):.2f}")
-                    print (f"Min reflectivity: {np.min(reflect_all):.2f}")
-                    print (f"Std reflectivity: {np.std(reflect_all):.2f} \n")
-            except Exception as e:
-                print (f"Error processing file {filename}: {e}")
+                #if f"mean_reflectivity_sector_{sector}" not in df.columns:
+                #    df[f"mean_reflectivity_sector_{sector}"] = np.nan
+                #df.loc[idx, f"mean_reflectivity_sector_{sector}"] = np.mean(reflect_all)
+                #print (f"Mean reflectivity: {np.mean(reflect_all):.2f}")
+                #print (f"Max reflectivity: {np.max(reflect_all):.2f}")
+                #print (f"Min reflectivity: {np.min(reflect_all):.2f}")
+                #print (f"Std reflectivity: {np.std(reflect_all):.2f} \n")
+            #except Exception as e:
+            #    print (f"Error processing file {filename}: {e}")
 
     df.to_csv(csv_path, index=False)
 
