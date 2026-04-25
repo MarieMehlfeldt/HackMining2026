@@ -1,11 +1,13 @@
 import numpy as np
 
 def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame_coords_pre, threshold_distance, threshold_deriv, threshold_reflect, n_sectors, cluster_perc_threshold):
+    frame_reflectivity = frame_reflectivity.reshape(frame_coords.shape[0], frame_coords.shape[1])
     print("labels shape:", labels.shape)
     print("indices shape:", indices.shape)
     print("frame_coords shape:", frame_coords.shape)
     print("frame_reflectivity shape:", frame_reflectivity.shape)
     print("frame_coords_pre shape:", frame_coords_pre.shape)
+
     coords_dirty_points = []
     coords_clean_points = []
     dirty_points_in_sectors = np.zeros(n_sectors, dtype=np.float64)
@@ -83,7 +85,7 @@ if __name__ == "__main__":
     # Example frame data.
     frame_coords_ex = rng.uniform(-1.0, 1.0, size=(height_ex, width_ex, 3)).astype(np.float32)
     frame_coords_pre_ex = frame_coords_ex + rng.normal(0.0, 0.03, size=(height_ex, width_ex, 3)).astype(np.float32)
-    frame_reflectivity_ex = rng.uniform(0.0, 1.0, size=(height_ex, width_ex)).astype(np.float32)
+    frame_reflectivity_ex = rng.uniform(0.0, 1.0, size=(height_ex, width_ex, 1)).astype(np.float32)
 
     # Example clustered subset represented by C-style flat indices.
     n_sample_points = 2500
