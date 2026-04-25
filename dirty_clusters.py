@@ -1,50 +1,79 @@
 import numpy as np
 
-def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame_coords_pre, threshold_distance, threshold_deriv, threshold_reflect, n_sectors):
-    coords_dirty_points = []
-    coords_clean_points = []
-    dirty_points_in_sectors = np.zeros (n_sectors)
+import numpy as np
+
+def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity,
+                        frame_coords_pre, threshold_distance,
+                        threshold_deriv, threshold_reflect, n_sectors):
 
     cluster_perc_threshold = 0.33
 
-    cluster_labels_unique = list(set(labels))
-    # iterate through the clusters
-    for cluster in cluster_labels_unique:
-        point_indices = np.where(labels == cluster)[0] # find indices of the points in the cluster
-        n_points_in_cluster = len(point_indices)
-        n_dirty_in_cluster = 0
-        for idx in point_indices:
-            row, col = np.unravel_index(indices[idx], (16, 720))
-            sector = min(int(col / 720 * n_sectors), n_sectors - 1)
-            # determine if point is dirty using classical determinants
-            coords_now = frame_coords[row, col, :]
-            reflectivity_now = frame_reflectivity[row, col]
-            coords_pre = frame_coords_pre[row, col, :]
-            distance_now = np.linalg.norm(coords_now)
-            distance_pre = np.linalg.norm(coords_pre)
-            distance_deriv = distance_now - distance_pre
-            is_dirty = (distance_now < threshold_distance) and ((distance_deriv < threshold_deriv) or (reflectivity_now < threshold_reflect))
-            if is_dirty:
-                n_dirty_in_cluster += 1
-                if cluster == -1: # if the point is not part of a cluster
-                    coords_dirty_points.append(coords_now)
-                    dirty_points_in_sectors[sector] += 1
-            else:
-                if cluster == -1: # if the point is not part of a cluster
-                    coords_clean_points.append(coords_now)
-        if n_points_in_cluster == 0 or cluster == -1: # if there are no points in the cluster or the points are not actually clustered
-            continue
-        perc_dirty_in_cluster = n_dirty_in_cluster / n_points_in_cluster
-        if perc_dirty_in_cluster > cluster_perc_threshold: # if more than threshold of the points in the cluster are dirty, consider the whole cluster as dirty
-            for idx in point_indices:
-                row, col = np.unravel_index(indices[idx], (16, 720))
-                sector = min(int(col / 720 * n_sectors), n_sectors - 1)
-                coords_now = frame_coords[row, col, :]
-                coords_dirty_points.append(coords_now)
-                dirty_points_in_sectors[sector] += 1
-        else: # if less than threshold of the points in the cluster are dirty, consider the whole cluster as clean
-            for idx in point_indices:
-                row, col = np.unravel_index(indices[idx], (16, 720))
-                coords_now = frame_coords[row, col, :]
-                coords_clean_points.append(coords_now)
+    # --- Precompute row/col once ---
+    rows, cols = np.unravel_index(indices, (16, 720))
+
+    # --- Precompute sector per point ---
+    sectors = np.minimum((cols / 720 * n_sectors).astype(int), n_sectors - 1)
+
+    # --- Gather data ---
+    coords_now = frame_coords[rows, cols]          # (N, 3)
+    coords_pre = frame_coords_pre[rows, cols]      # (N, 3)
+    reflectivity_now = frame_reflectivity[rows, cols]
+
+    # --- Compute distances vectorized ---
+    distance_now = np.linalg.norm(coords_now, axis=1)
+    distance_pre = np.linalg.norm(coords_pre, axis=1)
+    distance_deriv = distance_now - distance_pre
+
+    # --- Dirty mask ---
+    is_dirty = (
+        (distance_now < threshold_distance) &
+        ((distance_deriv < threshold_deriv) |
+         (reflectivity_now < threshold_reflect))
+    )
+
+    # --- Handle noise points (cluster == -1) directly ---
+    noise_mask = labels == -1
+
+    coords_dirty_points = coords_now[noise_mask & is_dirty].tolist()
+    coords_clean_points = coords_now[noise_mask & ~is_dirty].tolist()
+
+    dirty_points_in_sectors = np.zeros(n_sectors)
+    np.add.at(dirty_points_in_sectors,
+              sectors[noise_mask & is_dirty], 1)
+
+    # --- Process real clusters ---
+    valid_mask = ~noise_mask
+    valid_labels = labels[valid_mask]
+
+    if valid_labels.size == 0:
+        return dirty_points_in_sectors, coords_dirty_points, coords_clean_points
+
+    # Remap cluster labels to 0...K-1
+    unique_labels, inverse = np.unique(valid_labels, return_inverse=True)
+
+    # Count points per cluster
+    counts = np.bincount(inverse)
+    dirty_counts = np.bincount(inverse, weights=is_dirty[valid_mask])
+
+    perc_dirty = dirty_counts / counts
+
+    # Determine which clusters are dirty
+    cluster_is_dirty = perc_dirty > cluster_perc_threshold
+
+    # Map back to point-level decision
+    point_cluster_dirty = cluster_is_dirty[inverse]
+
+    # --- Assign points ---
+    cluster_dirty_mask = valid_mask.copy()
+    cluster_dirty_mask[valid_mask] = point_cluster_dirty
+
+    cluster_clean_mask = valid_mask & ~cluster_dirty_mask
+
+    # --- Append results ---
+    coords_dirty_points.extend(coords_now[cluster_dirty_mask].tolist())
+    coords_clean_points.extend(coords_now[cluster_clean_mask].tolist())
+
+    np.add.at(dirty_points_in_sectors,
+              sectors[cluster_dirty_mask], 1)
+
     return dirty_points_in_sectors, coords_dirty_points, coords_clean_points
