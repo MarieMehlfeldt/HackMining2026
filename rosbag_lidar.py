@@ -100,8 +100,10 @@ def get_lidar_data(file:Path):
 
 if __name__ == "__main__":
     # this is a minimal example showing the usage of the get_lidar_data function.
-    path = Path("D:\\minehack")
+    path = Path("/Users/mariemehlfeldt/Desktop/Hackmingin2026_Data")
     for folder in path.iterdir():
+        if not folder.is_dir():
+            continue
         for file_ in folder.iterdir():
             if file_.suffix != ".mcap":
                 continue
