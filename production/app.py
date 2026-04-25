@@ -100,9 +100,9 @@ def receive_matrices() -> Any:
             _old_matrices = _latest_matrices
             _latest_matrices = matrices
 
-        # Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
+        Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
         print("Received matrices, starting processing thread...")
-        process_frame(matrices, _old_matrices, SETTINGS)
+        # process_frame(matrices, _old_matrices, SETTINGS)
 
     return jsonify(
         {
@@ -159,7 +159,7 @@ def poll_upstream_forever():
         time.sleep(0.05)  # 20 Hz polling
 
 def main(args=None):
-    Thread(target=poll_upstream_forever, daemon=True).start()
+    # Thread(target=poll_upstream_forever, daemon=True).start()
 
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5001"))
