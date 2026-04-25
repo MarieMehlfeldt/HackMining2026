@@ -1,9 +1,12 @@
+import time
+from dataclasses import dataclass
+
 import numpy as np
+
+from . import cloud_state
 from .clustering import cluster_frame
 from .dirty_clusters import find_dirty_clusters
-from dataclasses import dataclass
-from . import cloud_state
-import time
+
 
 @dataclass
 class AppSettings:

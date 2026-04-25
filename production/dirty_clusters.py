@@ -1,6 +1,11 @@
 import numpy as np
 
 def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame_coords_pre, threshold_distance, threshold_deriv, threshold_reflect, n_sectors, cluster_perc_threshold):
+    print("labels shape:", labels.shape)
+    print("indices shape:", indices.shape)
+    print("frame_coords shape:", frame_coords.shape)
+    print("frame_reflectivity shape:", frame_reflectivity.shape)
+    print("frame_coords_pre shape:", frame_coords_pre.shape)
     coords_dirty_points = []
     coords_clean_points = []
     dirty_points_in_sectors = np.zeros(n_sectors, dtype=np.float64)
@@ -49,7 +54,7 @@ def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame
             coords_clean_points.extend(noise_clean_coords)
 
             dirty_sectors = sectors_all[cluster_mask][cluster_dirty_mask]
-            if dirty_sectors.size:
+            if dirty_sectors.size > 0:
                 dirty_points_in_sectors += np.bincount(dirty_sectors, minlength=n_sectors)
             continue
 
@@ -66,3 +71,38 @@ def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame
 
     dirty_perc_in_sectors = (dirty_points_in_sectors / n_point_in_sectors) * 100
     return dirty_perc_in_sectors, coords_dirty_points, coords_clean_points
+
+
+if __name__ == "__main__":
+    rng = np.random.default_rng(42)
+
+    height_ex = 16
+    width_ex = 720
+    n_total_ex = height_ex * width_ex
+
+    # Example frame data.
+    frame_coords_ex = rng.uniform(-1.0, 1.0, size=(height_ex, width_ex, 3)).astype(np.float32)
+    frame_coords_pre_ex = frame_coords_ex + rng.normal(0.0, 0.03, size=(height_ex, width_ex, 3)).astype(np.float32)
+    frame_reflectivity_ex = rng.uniform(0.0, 1.0, size=(height_ex, width_ex)).astype(np.float32)
+
+    # Example clustered subset represented by C-style flat indices.
+    n_sample_points = 2500
+    indices_ex = rng.choice(n_total_ex, size=n_sample_points, replace=False)
+    labels_ex = rng.choice(np.array([-1, 0, 1, 2], dtype=np.int32), size=n_sample_points)
+
+    dirty_perc_in_sectors_ex, coords_dirty_points_ex, coords_clean_points_ex = find_dirty_clusters(
+        labels=labels_ex,
+        indices=indices_ex,
+        frame_coords=frame_coords_ex,
+        frame_reflectivity=frame_reflectivity_ex,
+        frame_coords_pre=frame_coords_pre_ex,
+        threshold_distance=0.6,
+        threshold_deriv=-0.02,
+        threshold_reflect=0.2,
+        n_sectors=10,
+        cluster_perc_threshold=20.0,
+    )
+
+    print("Dirty percentage per sector:", dirty_perc_in_sectors_ex)
+    print("Number of dirty points:", len(coords_dirty_points_ex))
+    print("Number of clean points:", len(coords_clean_points_ex))
