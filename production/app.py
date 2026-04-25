@@ -95,37 +95,32 @@ def receive_matrices() -> Any:
     if missing:
         return jsonify({"error": f"Missing required matrices: {missing}"}), 400
 
-<<<<<<< HEAD
+
     try:
         matrices = {
             name: _parse_matrix(payload[name], expected_shape, name)
             for name, expected_shape in EXPECTED_SHAPES.items()
-=======
-        try:
-            matrices = {
-                name: _parse_matrix(payload[name], expected_shape, name)
-                for name, expected_shape in EXPECTED_SHAPES.items()
-            }
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-
-        with _store_lock:
-            global _latest_matrices
-            global _old_matrices
-            _old_matrices = _latest_matrices
-            _latest_matrices = matrices
-
-        Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
-        # print("Received matrices, starting processing thread...")
-        # process_frame(matrices, _old_matrices, SETTINGS)
-
-    return jsonify(
-        {
-            "status": "received",
-            "sender_ip": client_ip,
-            "shapes": {name: list(arr.shape) for name, arr in matrices.items()},
->>>>>>> 38f372717c073634d5bbc751e3e10f5a75e566ec
         }
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    with _store_lock:
+        global _latest_matrices
+        global _old_matrices
+        _old_matrices = _latest_matrices
+        _latest_matrices = matrices
+
+    Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
+    # print("Received matrices, starting processing thread...")
+    # process_frame(matrices, _old_matrices, SETTINGS)
+
+    try:
+        return jsonify(
+            {
+                "status": "received",
+                "sender_ip": client_ip,
+                "shapes": {name: list(arr.shape) for name, arr in matrices.items()},
+            })
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -170,23 +165,11 @@ def get_latest_shapes() -> Any:
 
 # ── Webpage API endpoints ───────────────────────────────────────────────────────
 
-@app.get("/api/sectors")
-def get_sectors() -> Any:
-    """Return the latest per-sector dirtiness values for the radar card."""
-    with cloud_state.sectors_lock:
-        return jsonify({
-            "ok":      True,
-            "sectors": cloud_state.sectors_state["sectors"],
-            "value":   cloud_state.sectors_state["value"],
-        })
-
-
-@app.get("/api/pointcloud")
-def get_pointcloud() -> Any:
-    """Return the latest clean/dirty point cloud coordinates for the 3D card."""
-    with cloud_state.pointcloud_lock:
-        return jsonify(cloud_state.pointcloud_state)
-
+@app.get("/api/data")
+def get_unified_data() -> Any:
+    """Return the combined sectors and pointcloud data in one JSON payload."""
+    with cloud_state.data_lock:
+        return jsonify(cloud_state.data_state)
 
 # ── Optional upstream polling (disabled by default) ────────────────────────────
 
@@ -209,11 +192,12 @@ def poll_upstream_forever():
                 _old_matrices    = _latest_matrices
                 _latest_matrices = matrices
 
-            Thread(
-                target=process_frame,
-                args=(matrices, _old_matrices, SETTINGS),
-                daemon=True
-            ).start()
+            # Thread(
+            #     target=process_frame,
+            #     args=(matrices, _old_matrices, SETTINGS),
+            #     daemon=True
+            # ).start()
+            process_frame(matrices, _old_matrices, SETTINGS)
 
         except Exception as exc:
             app.logger.warning(f"Polling failed: {exc}")

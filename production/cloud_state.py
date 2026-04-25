@@ -1,3 +1,9 @@
 from threading import Lock
-pointcloud_state = {"clean": [], "dirty": []}
-pointcloud_lock = Lock()
+
+# Unified state dict matching what the frontend expects
+data_state = {
+    "sectors": [],
+    "dirty": [],
+    "clean": []
+}
+data_lock = Lock()
