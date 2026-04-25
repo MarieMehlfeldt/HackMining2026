@@ -7,14 +7,15 @@ from typing import Any
 import numpy as np
 from flask import Flask, jsonify, request
 from dataclasses import dataclass
+from threading import Thread
+from .pipeline import process_frame, AppSettings
 
 app = Flask(__name__)
 
-
-
+SETTINGS = AppSettings()
 
 # Configure which sender IP is accepted (can be overridden via env var).
-ALLOWED_SENDER_IP = os.getenv("ALLOWED_SENDER_IP", "127.0.0.1")
+ALLOWED_SENDER_IP = os.getenv("ALLOWED_SENDER_IP", "192.168.0.33")
 
 EXPECTED_SHAPES = {
     "coords": (16, 720, 3),
@@ -92,6 +93,8 @@ def receive_matrices() -> Any:
         _old_matrices = _latest_matrices
         _latest_matrices = matrices
 
+    Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
+
     return jsonify(
         {
             "status": "received",
@@ -123,6 +126,6 @@ def get_latest_matrices() -> Any:
 
 if __name__ == "__main__":
     host = os.getenv("FLASK_HOST", "0.0.0.0")
-    port = int(os.getenv("FLASK_PORT", "5000"))
+    port = int(os.getenv("FLASK_PORT", "5001"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
     app.run(host=host, port=port, debug=debug)
