@@ -1,50 +1,113 @@
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, render_template, request, jsonify
 from threading import Lock
 
 app = Flask(__name__)
 
-state = {"value": 0}
-lock = Lock()
+N_SECTORS = 5
+
+data_lock = Lock()
+current_sectors = [0.0, 0.0, 0.0, 0.0, 0.0]
+current_value = 0.0
+
+
+def clamp(value, minimum=0.0, maximum=100.0):
+    return max(minimum, min(maximum, value))
+
+
+def sanitize_sector_values(values):
+    if not isinstance(values, list):
+        raise ValueError("sectors must be a list")
+
+    if len(values) != N_SECTORS:
+        raise ValueError(f"sectors must contain exactly {N_SECTORS} values")
+
+    clean_values = []
+
+    for value in values:
+        clean_values.append(clamp(float(value), 0.0, 100.0))
+
+    return clean_values
+
+
+def calculate_overall_dirtiness(sectors):
+    if not sectors:
+        return 0.0
+
+    return sum(sectors) / len(sectors)
 
 
 @app.route("/")
-def index():
+def home():
     return render_template("index.html")
 
 
-@app.get("/api/dirt")
-def get_dirt():
-    with lock:
-        return jsonify(state)
+@app.route("/api/sectors", methods=["GET", "POST"])
+def sectors():
+    global current_sectors
+    global current_value
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+
+        raw_sectors = data.get("sectors")
+
+        if raw_sectors is None:
+            return jsonify({
+                "ok": False,
+                "error": "Missing JSON key: sectors"
+            }), 400
+
+        try:
+            clean_sectors = sanitize_sector_values(raw_sectors)
+        except ValueError as error:
+            return jsonify({
+                "ok": False,
+                "error": str(error)
+            }), 400
+
+        with data_lock:
+            current_sectors = clean_sectors
+            current_value = calculate_overall_dirtiness(clean_sectors)
+
+        return jsonify({
+            "ok": True,
+            "sectors": current_sectors,
+            "value": current_value
+        })
+
+    with data_lock:
+        return jsonify({
+            "ok": True,
+            "sectors": current_sectors,
+            "value": current_value
+        })
 
 
-@app.post("/api/dirt")
-def set_dirt():
-    data = request.get_json(silent=True) or {}
+@app.route("/api/dirt", methods=["GET", "POST"])
+def dirt():
+    global current_sectors
+    global current_value
 
-    try:
-        value = float(data.get("value"))
-    except (TypeError, ValueError):
-        return jsonify({"error": "Send JSON like {'value': 42}"}), 400
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        value = clamp(float(data.get("value", 0.0)), 0.0, 100.0)
 
-    value = max(0, min(100, value))
+        with data_lock:
+            current_value = value
+            current_sectors = [value] * N_SECTORS
 
-    with lock:
-        state["value"] = value
+        return jsonify({
+            "ok": True,
+            "value": current_value,
+            "sectors": current_sectors
+        })
 
-    return jsonify({"ok": True, "value": value})
-
-
-# Easy browser test route:
-# Example: http://localhost:5000/set/75
-@app.get("/set/<float:value>")
-def set_dirt_from_browser(value):
-    value = max(0, min(100, value))
-
-    with lock:
-        state["value"] = value
-
-    return f"Dirt-O-Meter set to {value}%. Go back to http://localhost:5000"
+    with data_lock:
+        return jsonify({
+            "ok": True,
+            "value": current_value,
+            "sectors": current_sectors
+        })
 
 
 if __name__ == "__main__":
