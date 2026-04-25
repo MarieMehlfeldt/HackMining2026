@@ -107,9 +107,15 @@ class LidarProcessor(Node):
 
         
         if(self.counter>0):
-            old_data=self.old_data[:,:3].reshape((16,720, 3), order="C")
-            current_data=point_matrix[:,:3].reshape((16,720, 3), order="C")
-            current_reflectivity=point_matrix[:,5].reshape((16,720), order="C")
+            try:
+                old_data=self.old_data[:,:3].reshape((16,720, 3), order="C")
+                current_data=point_matrix[:,:3].reshape((16,720, 3), order="C")
+                current_reflectivity=point_matrix[:,5].reshape((16,720), order="C")
+            except Exception as e:
+                self.get_logger().warn("warn")
+                old_data=np.zeros((16,720, 3), order="C")
+                current_data=np.zeros((16,720, 3), order="C")
+                current_reflectivity=np.zeros((16,720), order="C")
             dirt=find_dirt_perc(current_data,current_reflectivity,old_data,0.1,0,100,5)
             self.get_logger().info(f"{dirt}")
         self.old_data=point_matrix
