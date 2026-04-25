@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 from rosbags.rosbag2.reader import Reader
 from rosbags.typesys import Stores, get_typestore
+from plot_3d_lidar import play_lidar_video_open3d
 
 
 def get_lidar_data(file:Path):
@@ -44,7 +45,7 @@ def get_lidar_data(file:Path):
         reflectivity_offset = None
         reflectivity_dtype = None
         for i, msg in enumerate(reader.messages(lidar_sets)):
-            connection, timestamp, raw_data = msg
+            connection, _timestamp, raw_data = msg
             msg = typestore.deserialize_cdr(raw_data, connection.msgtype)
             # blocksize = msg_to_block_size(raw_data)
             # print(blocksize)
@@ -100,12 +101,14 @@ def get_lidar_data(file:Path):
 
 if __name__ == "__main__":
     # this is a minimal example showing the usage of the get_lidar_data function.
-    path = Path("D:\\minehack")
+    path = Path("D:\\minehack\\sat_morning")
     for folder in path.iterdir():
         for file_ in folder.iterdir():
             if file_.suffix != ".mcap":
                 continue
             try:
-                print(len(list(get_lidar_data(file_))))
+                play_lidar_video_open3d(file_,
+                                        max_points=250_000,
+                                        crit = 0.1)
             except Exception as e:
                 print(f"Error processing {file_}: {e}")
