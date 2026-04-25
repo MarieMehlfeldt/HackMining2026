@@ -6,17 +6,22 @@ from matplotlib.animation import FuncAnimation, FFMpegWriter
 import pandas as pd
 
 
-def find_dirt_perc(frame_coords, frame_reflectivity, frame_coords_pre, threshold_distance, threshold_deriv, threshold_reflect):
-    dist = np.linalg.norm(frame_coords, axis=2).flatten()
-    reflect_flat = frame_reflectivity.reshape(-1)
-    if frame_coords_pre.size == 0:
-        dirt_mask = (dist < threshold_distance) & (reflect_flat < threshold_reflect)
-    else:
-        dist_pre = np.linalg.norm(frame_coords_pre, axis=2).flatten()
-        dist_deriv = dist - dist_pre
-        dirt_mask = (dist < threshold_distance) & ((dist_deriv < threshold_deriv) | (reflect_flat < threshold_reflect))
-    perc_dirt = (np.sum(dirt_mask) / len(dist)) * 100
+def find_dirt_perc(frame_coords, frame_reflectivity, frame_coords_pre, threshold_distance, threshold_deriv, threshold_reflect, n_sectors):
+    perc_dirt = np.zeros(n_sectors)
+    for sector in range(n_sectors):
+        slice_start = (sector * frame_coords.shape[1]) // n_sectors
+        slice_end = ((sector + 1) * frame_coords.shape[1]) // n_sectors
+        dist = np.linalg.norm(frame_coords[:, slice_start:slice_end, :], axis=2).flatten()
+        reflect_flat = frame_reflectivity[:, slice_start:slice_end, :].reshape(-1)
+        if frame_coords_pre.size == 0:
+            dirt_mask = (dist < threshold_distance) & (reflect_flat < threshold_reflect)
+        else:
+            dist_pre = np.linalg.norm(frame_coords_pre[:, slice_start:slice_end, :], axis=2).flatten()
+            dist_deriv = dist - dist_pre
+            dirt_mask = (dist < threshold_distance) & ((dist_deriv < threshold_deriv) | (reflect_flat < threshold_reflect))
+        perc_dirt[sector]=(np.sum(dirt_mask) / (len(dist)//n_sectors)) * 100 # calculate percentage of dirt points in this sector and append to list
     return perc_dirt
+
 
 if __name__ == "__main__":
     csv_path = Path("/Users/mariemehlfeldt/Desktop/HackMining2026/data_key.csv")
@@ -42,27 +47,11 @@ if __name__ == "__main__":
                 frames_coords = coords
                 frames_reflectivity = reflectivity
 
+                for frame_idx in range(1, len(frames_coords)):
+                    percentage_dirt = np.zeros((len(frames_coords), n_sectors))
+                    percentage_dirt[frame_idx, :] = find_dirt_perc(frames_coords[frame_idx][:, slice_start:slice_end, :], frames_reflectivity[frame_idx][:, slice_start:slice_end], frames_coords[frame_idx-1][:, slice_start:slice_end, :], threshold_distance, threshold_deriv, threshold_reflect)
 
-                
-                # precompute dirt percentages for all frames
                 for sector in range(n_sectors):
-                    dist_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
-                    reflect_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
-                    first_deriv_all = np.zeros((len(frames_coords), coords[0].shape[0], coords[0].shape[1]//n_sectors), dtype=object)
-                    percentage_dirt = np.zeros(len(frames_coords))
-                    n_sensors = coords[0].shape[0] * coords[0].shape[1]//n_sectors
-
-                    slice_start = (sector * frames_coords[0].shape[1]) // n_sectors
-                    slice_end = ((sector + 1) * frames_coords[0].shape[1]) // n_sectors
-                    for frame_idx in range(len(frames_coords)):
-                        points = frames_coords[frame_idx][:, slice_start:slice_end, :]
-                        dist_all[frame_idx, :] = np.linalg.norm(points, axis=2)
-                        reflect = frames_reflectivity[frame_idx][:, slice_start:slice_end]
-                        reflect_all[frame_idx, :] = reflect
-                        if frame_idx > 0:
-                            first_deriv_all[frame_idx, :] = dist_all[frame_idx, :] - dist_all[frame_idx - 1, :]
-                        percentage_dirt[frame_idx] = (np.sum((dist_all[frame_idx, :] < threshold_distance) & ((first_deriv_all[frame_idx, :] < threshold_deriv) | (reflect_all[frame_idx, :] < threshold_reflect))) / n_sensors) * 100
-
                     # write results into csv file
                     if f"dirt_percentage_sector_{sector}" not in df.columns:
                         df[f"dirt_percentage_sector_{sector}"] = np.nan
