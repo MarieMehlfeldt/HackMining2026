@@ -101,7 +101,7 @@ def receive_matrices() -> Any:
             _latest_matrices = matrices
 
         Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
-        print("Received matrices, starting processing thread...")
+        # print("Received matrices, starting processing thread...")
         # process_frame(matrices, _old_matrices, SETTINGS)
 
     return jsonify(
