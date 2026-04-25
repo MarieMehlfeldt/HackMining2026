@@ -95,10 +95,36 @@ def receive_matrices() -> Any:
     if missing:
         return jsonify({"error": f"Missing required matrices: {missing}"}), 400
 
+<<<<<<< HEAD
     try:
         matrices = {
             name: _parse_matrix(payload[name], expected_shape, name)
             for name, expected_shape in EXPECTED_SHAPES.items()
+=======
+        try:
+            matrices = {
+                name: _parse_matrix(payload[name], expected_shape, name)
+                for name, expected_shape in EXPECTED_SHAPES.items()
+            }
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        with _store_lock:
+            global _latest_matrices
+            global _old_matrices
+            _old_matrices = _latest_matrices
+            _latest_matrices = matrices
+
+        Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
+        # print("Received matrices, starting processing thread...")
+        # process_frame(matrices, _old_matrices, SETTINGS)
+
+    return jsonify(
+        {
+            "status": "received",
+            "sender_ip": client_ip,
+            "shapes": {name: list(arr.shape) for name, arr in matrices.items()},
+>>>>>>> 38f372717c073634d5bbc751e3e10f5a75e566ec
         }
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
