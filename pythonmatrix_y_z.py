@@ -10,13 +10,15 @@ import numpy as np
 from std_msgs.msg import Int32
 
 
-DASHBOARD_URL = "http://127.0.0.1:5001/api/sectors"
+DASHBOARD_URL = "http://192.168.0.101:5001/api/sectors"
 
 N_SECTORS = 5
 
 # You can change these later
 WARNING_DIRT_PERCENT = 50
 CRITICAL_DIRT_PERCENT = 90
+
+DIRT_MULTIPLIER = 4.0
 
 
 def find_dirt_perc(
@@ -196,6 +198,9 @@ class LidarProcessor(Node):
                 threshold_reflect=100,
                 n_sectors=N_SECTORS
             )
+
+            # Apply the multiplier to the numpy array
+            dirt = dirt * DIRT_MULTIPLIER
 
             self.get_logger().info(f"Dirt sectors: {dirt}")
 
