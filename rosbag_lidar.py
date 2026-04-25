@@ -100,8 +100,9 @@ def get_lidar_data(file:Path):
 
 if __name__ == "__main__":
     # this is a minimal example showing the usage of the get_lidar_data function.
-    path = Path("")
+    path = Path("/mnt/c/Users/Lukas/Documents/hackmining26/sat_morning/")
     for folder in path.iterdir():
+        # print(folder.name)
         if not folder.is_dir():
             continue
         for file_ in folder.iterdir():
