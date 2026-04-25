@@ -23,7 +23,7 @@ def cluster_frame(coords:np.ndarray, eps:float=0.03, min_samples:int=5, max_dist
     indices = np.arange(coords.shape[0])
     filter_ = np.linalg.norm(coords, axis=1) <= max_dist
     if np.sum(filter_) > 5000:
-        return np.array(np.ones_like(indices[filter_])), indices[filter_]
+        return np.ones(indices[filter_].shape[0], dtype=int), indices[filter_]
     coords = coords[filter_]
     indices = indices[filter_]
     labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(coords)
