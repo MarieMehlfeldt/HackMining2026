@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dirt-O-Meter + LiDAR 360° Visibility View + Rock Status</title>
+  <title>Dirt-O-Meter + LiDAR 360° Sector View</title>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
@@ -321,31 +321,32 @@
       color: #1a1d23;
     }
 
-    .visibility-grid {
+    .sector-grid {
       width: 100%;
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
       margin-top: 16px;
     }
 
-    .visibility-item {
+    .sector-item {
       background: #ffffff;
       border: 1px solid #eef0f4;
       border-radius: 12px;
-      padding: 10px 12px;
+      padding: 10px 8px;
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
       align-items: center;
+      gap: 4px;
       font-size: 12px;
     }
 
-    .visibility-item .name {
+    .sector-item .name {
       font-weight: 600;
       color: #374151;
     }
 
-    .visibility-item .value {
+    .sector-item .value {
       font-family: 'DM Mono', monospace;
       color: #111827;
     }
@@ -448,6 +449,10 @@
       body {
         align-items: flex-start;
       }
+
+      .sector-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
   </style>
 </head>
@@ -458,7 +463,7 @@
     <div class="card">
       <div class="header">
         <div class="title">Dirt-O-Meter</div>
-        <div class="subtitle">LiDAR lens contamination level</div>
+        <div class="subtitle">Average LiDAR sector dirtiness</div>
       </div>
 
       <canvas id="gauge"></canvas>
@@ -466,7 +471,7 @@
       <div class="readout">
         <div class="pct" id="pctText">0%</div>
         <div class="pill" id="pill">Clean</div>
-        <div class="instance" id="instanceText">Instance 1 / 200</div>
+        <div class="instance" id="instanceText">Waiting for data</div>
       </div>
 
       <div class="divider"></div>
@@ -485,7 +490,7 @@
 
       <div class="slider-section">
         <div class="slider-label">
-          <span>Manual Override</span>
+          <span>Manual Override All Sectors</span>
           <span class="slider-val" id="sliderVal">0</span>
         </div>
 
@@ -493,78 +498,82 @@
 
         <div class="demo-indicator">
           <div class="demo-dot"></div>
-          <span class="demo-text" id="modeText">Demo mode · animated every second</span>
+          <span class="demo-text" id="modeText">Live mode · polling /api/sectors</span>
         </div>
       </div>
     </div>
 
     <div class="card radar-card">
       <div class="header">
-        <div class="title">LiDAR 360° Visibility View</div>
-        <div class="subtitle">Striped grey area shows unavailable distance</div>
+        <div class="title">LiDAR 360° Dirt Sector View</div>
+        <div class="subtitle">5-sector view from ROS dirt percentage array</div>
       </div>
 
       <canvas id="radar"></canvas>
 
       <div class="radar-status" id="radarStatus">
-        Visibility overview
+        Waiting for sector data
       </div>
 
       <div class="radar-summary">
         <div class="summary-box">
-          <span>Lowest Visible Range</span>
-          <strong id="lowestVisible">-</strong>
+          <span>Dirtiest Sector</span>
+          <strong id="dirtiestSector">-</strong>
         </div>
         <div class="summary-box">
-          <span>Fully Blocked Segments</span>
-          <strong id="blockedCount">0 / 4</strong>
+          <span>Critical Sectors</span>
+          <strong id="criticalCount">0 / 5</strong>
         </div>
       </div>
 
-      <div class="visibility-grid">
-        <div class="visibility-item">
-          <span class="name">Front</span>
-          <span class="value" id="frontValue">-</span>
+      <div class="sector-grid">
+        <div class="sector-item">
+          <span class="name">S1</span>
+          <span class="value" id="sector1Value">-</span>
         </div>
-        <div class="visibility-item">
-          <span class="name">Right</span>
-          <span class="value" id="rightValue">-</span>
+        <div class="sector-item">
+          <span class="name">S2</span>
+          <span class="value" id="sector2Value">-</span>
         </div>
-        <div class="visibility-item">
-          <span class="name">Rear</span>
-          <span class="value" id="rearValue">-</span>
+        <div class="sector-item">
+          <span class="name">S3</span>
+          <span class="value" id="sector3Value">-</span>
         </div>
-        <div class="visibility-item">
-          <span class="name">Left</span>
-          <span class="value" id="leftValue">-</span>
+        <div class="sector-item">
+          <span class="name">S4</span>
+          <span class="value" id="sector4Value">-</span>
+        </div>
+        <div class="sector-item">
+          <span class="name">S5</span>
+          <span class="value" id="sector5Value">-</span>
         </div>
       </div>
 
       <div class="small-note">
-        White area = visible range · Striped grey area = unavailable range · Axes divide the view into 4 directions
+        White area = clean/usable portion · Striped grey area = dirty portion · Each sector receives one value from ROS
       </div>
     </div>
 
     <div class="card rock-card is-hidden" id="rockCard">
       <div class="header">
         <div class="title">Rock Status</div>
-        <div class="subtitle">Reaction image based on visibility</div>
+        <div class="subtitle">Junior Minor reaction mode</div>
       </div>
 
       <div class="rock-wrap">
         <div class="rock-image-frame">
-          <img id="rockImage" src="/static/sound/happyrock.jpg" alt="Rock status" />
+          <img id="rockImage" src="{{ url_for('static', filename='sound/happyrock.jpg') }}" alt="Rock status" />
         </div>
 
         <div class="rock-status-pill" id="rockStatusPill">Happy Rock</div>
 
         <div class="rock-level-box">
           <span>Current Reaction Trigger</span>
-          <strong id="rockLevelText">Visible</strong>
+          <strong id="rockLevelText">Clean</strong>
         </div>
 
         <div class="rock-caption" id="rockCaption">
-          Visibility is good. Rock is calm.
+          Dirt levels are low. Rock is calm.
         </div>
       </div>
     </div>
@@ -572,12 +581,25 @@
   </div>
 
   <script>
-    const DEMO_MODE = true;
+    const DEMO_MODE = false;
     const SEND_DEMO_VALUES_TO_BACKEND = true;
+
+    const N_SECTORS = 5;
+    const CRITICAL_DIRT_PERCENT = 90;
+    const WARNING_DIRT_PERCENT = 50;
+    const OVERALL_DIRTINESS_MODE = 'average';
+
     const DEMO_INSTANCE_COUNT = 200;
     const DEMO_INSTANCE_EVERY_MS = 1000;
-    const ANIMATION_DURATION_MS = 850;
+    const ANIMATION_DURATION_MS = 650;
     const BACKEND_POLL_INTERVAL_MS = 500;
+
+    const ASSET_PATHS = {
+      happy: "{{ url_for('static', filename='sound/happyrock.jpg') }}",
+      mid: "{{ url_for('static', filename='sound/midrock.jpg') }}",
+      sus: "{{ url_for('static', filename='sound/susrock.png') }}",
+      blocked: "{{ url_for('static', filename='sound/blocked.mp3') }}"
+    };
 
     const W = 312;
     const SIDE_PAD = 22;
@@ -596,6 +618,10 @@
     const C_GREEN = { r: 34, g: 197, b: 94 };
     const C_YELLOW = { r: 245, g: 158, b: 11 };
     const C_RED = { r: 239, g: 68, b: 68 };
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
 
     function lerpRGB(a, b, t) {
       return {
@@ -702,30 +728,30 @@
     const RADAR_CX = RADAR_W / 2;
     const RADAR_CY = RADAR_H / 2;
     const RADAR_RADIUS = 145;
-    const MAX_RANGE_M = 20;
+    const RADAR_START_DEG = -90;
+    const SECTOR_SIZE_DEG = 360 / N_SECTORS;
 
     radarCanvas.width = RADAR_W;
     radarCanvas.height = RADAR_H;
 
     const radarStatus = document.getElementById('radarStatus');
-    const lowestVisibleEl = document.getElementById('lowestVisible');
-    const blockedCountEl = document.getElementById('blockedCount');
+    const dirtiestSectorEl = document.getElementById('dirtiestSector');
+    const criticalCountEl = document.getElementById('criticalCount');
 
-    const frontValue = document.getElementById('frontValue');
-    const rightValue = document.getElementById('rightValue');
-    const rearValue = document.getElementById('rearValue');
-    const leftValue = document.getElementById('leftValue');
+    const sectorValueEls = [
+      document.getElementById('sector1Value'),
+      document.getElementById('sector2Value'),
+      document.getElementById('sector3Value'),
+      document.getElementById('sector4Value'),
+      document.getElementById('sector5Value')
+    ];
 
     function degToRad(deg) {
       return deg * Math.PI / 180;
     }
 
-    function clamp(value, min, max) {
-      return Math.max(min, Math.min(max, value));
-    }
-
-    function metersToRadius(meters) {
-      return RADAR_RADIUS * (clamp(meters, 0, MAX_RANGE_M) / MAX_RANGE_M);
+    function percentToCleanRadius(dirtPercent) {
+      return RADAR_RADIUS * (1 - clamp(dirtPercent, 0, 100) / 100);
     }
 
     function createBlockedPattern() {
@@ -761,34 +787,39 @@
 
     const blockedPattern = createBlockedPattern();
 
-    function createSegmentsFromMeterValue(overallDirtiness) {
-      const names = ['Front', 'Right', 'Rear', 'Left'];
+    function normalizeSectorValues(values) {
+      const cleanValues = Array.isArray(values) ? values.slice(0, N_SECTORS) : [];
 
-      const angles = [
-        { start: -135, end: -45 },
-        { start: -45, end: 45 },
-        { start: 45, end: 135 },
-        { start: 135, end: 225 }
-      ];
+      while (cleanValues.length < N_SECTORS) {
+        cleanValues.push(0);
+      }
 
-      const offsets = [-10, 5, 14, -3];
+      return cleanValues.map(value => clamp(Number(value) || 0, 0, 100));
+    }
 
-      return names.map((name, index) => {
-        const localDirt = clamp(overallDirtiness + offsets[index], 0, 100);
+    function calculateOverallDirtiness(sectorValues) {
+      const values = normalizeSectorValues(sectorValues);
 
-        let visibleRangeM = MAX_RANGE_M * (1 - localDirt / 115);
+      if (OVERALL_DIRTINESS_MODE === 'max') {
+        return Math.max(...values);
+      }
 
-        if (localDirt >= 97) {
-          visibleRangeM = 0;
-        }
+      return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
 
-        visibleRangeM = clamp(visibleRangeM, 0, MAX_RANGE_M);
+    function createSegmentsFromSectorValues(sectorValues) {
+      const values = normalizeSectorValues(sectorValues);
+
+      return values.map((dirtPercent, index) => {
+        const startDeg = RADAR_START_DEG + index * SECTOR_SIZE_DEG;
+        const endDeg = startDeg + SECTOR_SIZE_DEG;
 
         return {
-          name,
-          startDeg: angles[index].start,
-          endDeg: angles[index].end,
-          visibleRangeM
+          name: `S${index + 1}`,
+          index,
+          startDeg,
+          endDeg,
+          dirtPercent
         };
       });
     }
@@ -818,17 +849,14 @@
     function drawSegmentBase(segment) {
       const startRad = degToRad(segment.startDeg);
       const endRad = degToRad(segment.endDeg);
+      const cleanRadius = percentToCleanRadius(segment.dirtPercent);
 
       drawFullSector(startRad, endRad, '#ffffff');
 
-      const visibleRadius = metersToRadius(segment.visibleRangeM);
-
-      if (visibleRadius < RADAR_RADIUS) {
-        if (visibleRadius <= 0) {
-          drawFullSector(startRad, endRad, blockedPattern);
-        } else {
-          drawSectorRing(startRad, endRad, visibleRadius, RADAR_RADIUS, blockedPattern);
-        }
+      if (segment.dirtPercent >= 99.9) {
+        drawFullSector(startRad, endRad, blockedPattern);
+      } else if (segment.dirtPercent > 0) {
+        drawSectorRing(startRad, endRad, cleanRadius, RADAR_RADIUS, blockedPattern);
       }
     }
 
@@ -837,8 +865,8 @@
       radarCtx.strokeStyle = 'rgba(148, 163, 184, 0.40)';
       radarCtx.lineWidth = 1.15;
 
-      [5, 10, 15, 20].forEach(range => {
-        const r = metersToRadius(range);
+      [25, 50, 75, 100].forEach(percent => {
+        const r = RADAR_RADIUS * (percent / 100);
 
         radarCtx.beginPath();
         radarCtx.arc(RADAR_CX, RADAR_CY, r, 0, Math.PI * 2);
@@ -855,7 +883,8 @@
       radarCtx.lineWidth = 2;
       radarCtx.lineCap = 'round';
 
-      [-45, 45, 135, 225].forEach(deg => {
+      for (let i = 0; i < N_SECTORS; i++) {
+        const deg = RADAR_START_DEG + i * SECTOR_SIZE_DEG;
         const angle = degToRad(deg);
 
         radarCtx.beginPath();
@@ -865,7 +894,7 @@
           RADAR_CY + Math.sin(angle) * RADAR_RADIUS
         );
         radarCtx.stroke();
-      });
+      }
 
       radarCtx.restore();
     }
@@ -882,28 +911,19 @@
       radarCtx.restore();
     }
 
-    function drawAxisDistanceLabels() {
+    function drawPercentLabels() {
       radarCtx.save();
 
       radarCtx.font = '600 9px "DM Sans", Arial, sans-serif';
       radarCtx.fillStyle = '#8b95a5';
       radarCtx.textBaseline = 'middle';
 
-      [5, 10, 15, 20].forEach(range => {
-        const r = metersToRadius(range);
-        const text = `${range}m`;
+      [25, 50, 75, 100].forEach(percent => {
+        const r = RADAR_RADIUS * (percent / 100);
+        const text = `${percent}%`;
 
         radarCtx.textAlign = 'left';
         radarCtx.fillText(text, RADAR_CX + 6, RADAR_CY - r + 10);
-
-        radarCtx.textAlign = 'left';
-        radarCtx.fillText(text, RADAR_CX + r - 18, RADAR_CY - 4);
-
-        radarCtx.textAlign = 'left';
-        radarCtx.fillText(text, RADAR_CX + 6, RADAR_CY + r - 10);
-
-        radarCtx.textAlign = 'right';
-        radarCtx.fillText(text, RADAR_CX - r + 18, RADAR_CY - 4);
       });
 
       radarCtx.restore();
@@ -935,7 +955,7 @@
       radarCtx.restore();
     }
 
-    function drawDirectionLabels() {
+    function drawSectorNumbers(segments) {
       radarCtx.save();
 
       radarCtx.font = '700 11px "DM Sans", Arial, sans-serif';
@@ -943,20 +963,17 @@
       radarCtx.textAlign = 'center';
       radarCtx.textBaseline = 'middle';
 
-      radarCtx.fillText('FRONT', RADAR_CX, RADAR_CY - RADAR_RADIUS - 17);
-      radarCtx.fillText('REAR', RADAR_CX, RADAR_CY + RADAR_RADIUS + 17);
+      segments.forEach(segment => {
+        const midDeg = (segment.startDeg + segment.endDeg) / 2;
+        const angle = degToRad(midDeg);
+        const labelRadius = RADAR_RADIUS + 19;
 
-      radarCtx.save();
-      radarCtx.translate(RADAR_CX - RADAR_RADIUS - 20, RADAR_CY);
-      radarCtx.rotate(-Math.PI / 2);
-      radarCtx.fillText('LEFT', 0, 0);
-      radarCtx.restore();
-
-      radarCtx.save();
-      radarCtx.translate(RADAR_CX + RADAR_RADIUS + 20, RADAR_CY);
-      radarCtx.rotate(Math.PI / 2);
-      radarCtx.fillText('RIGHT', 0, 0);
-      radarCtx.restore();
+        radarCtx.fillText(
+          segment.name,
+          RADAR_CX + Math.cos(angle) * labelRadius,
+          RADAR_CY + Math.sin(angle) * labelRadius
+        );
+      });
 
       radarCtx.restore();
     }
@@ -968,45 +985,41 @@
       drawRangeRings();
       drawSegmentDividerLines();
       drawOuterCircle();
-      drawAxisDistanceLabels();
+      drawPercentLabels();
       drawCenterSensor();
-      drawDirectionLabels();
+      drawSectorNumbers(segments);
     }
 
     function updateRadarInfo(segments) {
-      const visibleValues = segments.map(s => s.visibleRangeM);
-      const minVisible = Math.min(...visibleValues);
-      const blockedCount = segments.filter(s => s.visibleRangeM <= 0.1).length;
+      const dirtValues = segments.map(segment => segment.dirtPercent);
+      const maxDirt = Math.max(...dirtValues);
+      const maxIndex = dirtValues.indexOf(maxDirt);
+      const criticalCount = dirtValues.filter(value => value >= CRITICAL_DIRT_PERCENT).length;
 
-      lowestVisibleEl.textContent = `${minVisible.toFixed(1)}m`;
-      blockedCountEl.textContent = `${blockedCount} / 4`;
+      dirtiestSectorEl.textContent = `S${maxIndex + 1} · ${maxDirt.toFixed(1)}%`;
+      criticalCountEl.textContent = `${criticalCount} / ${N_SECTORS}`;
 
-      frontValue.textContent = `${segments[0].visibleRangeM.toFixed(1)}m`;
-      rightValue.textContent = `${segments[1].visibleRangeM.toFixed(1)}m`;
-      rearValue.textContent = `${segments[2].visibleRangeM.toFixed(1)}m`;
-      leftValue.textContent = `${segments[3].visibleRangeM.toFixed(1)}m`;
+      sectorValueEls.forEach((el, index) => {
+        el.textContent = `${dirtValues[index].toFixed(1)}%`;
+      });
 
-      if (blockedCount > 0) {
-        radarStatus.textContent = 'One or more segments fully blocked';
-        radarStatus.style.background = '#f3f4f6';
-        radarStatus.style.color = '#4b5563';
-      } else if (minVisible <= 5) {
-        radarStatus.textContent = 'Visibility strongly reduced';
+      if (criticalCount > 0) {
+        radarStatus.textContent = 'Critical dirt level detected';
         radarStatus.style.background = '#fee2e2';
         radarStatus.style.color = '#b91c1c';
-      } else if (minVisible <= 10) {
-        radarStatus.textContent = 'Visibility partially reduced';
+      } else if (maxDirt >= WARNING_DIRT_PERCENT) {
+        radarStatus.textContent = 'Dirt level elevated';
         radarStatus.style.background = '#fef3c7';
         radarStatus.style.color = '#b45309';
       } else {
-        radarStatus.textContent = 'Visibility mostly clear';
+        radarStatus.textContent = 'Dirt levels mostly clean';
         radarStatus.style.background = '#dcfce7';
         radarStatus.style.color = '#15803d';
       }
     }
 
-    function updateRadarFromMeterValue(meterValue) {
-      const segments = createSegmentsFromMeterValue(meterValue);
+    function updateRadarFromSectorValues(sectorValues) {
+      const segments = createSegmentsFromSectorValues(sectorValues);
       drawRadar(segments);
       updateRadarInfo(segments);
       return segments;
@@ -1021,12 +1034,12 @@
     const rockLevelText = document.getElementById('rockLevelText');
     const rockCaption = document.getElementById('rockCaption');
 
-    const blockedAlertSound = new Audio('/static/sound/blocked.mp3');
+    const blockedAlertSound = new Audio(ASSET_PATHS.blocked);
     blockedAlertSound.volume = 0.75;
 
     let juniorMinorEnabled = false;
     let soundEnabled = false;
-    let wasFullyBlocked = false;
+    let wasCritical = false;
 
     async function unlockBlockedSound() {
       try {
@@ -1047,7 +1060,7 @@
     juniorMinorToggle.addEventListener('change', async () => {
       juniorMinorEnabled = juniorMinorToggle.checked;
       soundEnabled = juniorMinorEnabled;
-      wasFullyBlocked = false;
+      wasCritical = false;
 
       if (juniorMinorEnabled) {
         rockCard.classList.remove('is-hidden');
@@ -1055,8 +1068,8 @@
 
         await unlockBlockedSound();
 
-        const segments = createSegmentsFromMeterValue(currentDisplayValue);
-        updateRockStatus(currentDisplayValue, segments);
+        const segments = createSegmentsFromSectorValues(currentSectorValues);
+        updateRockStatus(segments);
       } else {
         rockCard.classList.add('is-hidden');
         juniorMinorState.textContent = 'Rock mode off · alerts muted';
@@ -1075,59 +1088,65 @@
       });
     }
 
-    function updateRockStatus(value, segments) {
+    function updateRockStatus(segments) {
       if (!juniorMinorEnabled) {
-        wasFullyBlocked = false;
+        wasCritical = false;
         return;
       }
 
-      const rounded = Math.round(value);
-      const fullyBlocked = segments.some(s => s.visibleRangeM <= 0.1);
+      const maxDirt = Math.max(...segments.map(segment => segment.dirtPercent));
+      const critical = maxDirt >= CRITICAL_DIRT_PERCENT;
 
-      if (fullyBlocked) {
-        rockImage.src = '/static/sound/susrock.png';
+      if (critical) {
+        rockImage.src = ASSET_PATHS.sus;
         rockStatusPill.textContent = 'Sus Rock';
         rockStatusPill.style.background = '#fee2e2';
         rockStatusPill.style.color = '#b91c1c';
-        rockLevelText.textContent = '0m visibility';
-        rockCaption.textContent = 'Critical visibility loss. Rock is judging the operator.';
+        rockLevelText.textContent = `≥ ${CRITICAL_DIRT_PERCENT}%`;
+        rockCaption.textContent = 'Critical dirt level detected. Rock is judging the operator.';
 
-        if (!wasFullyBlocked) {
+        if (!wasCritical) {
           playCriticalSound();
         }
 
-        wasFullyBlocked = true;
+        wasCritical = true;
         return;
       }
 
-      wasFullyBlocked = false;
+      wasCritical = false;
 
-      if (rounded >= 50) {
-        rockImage.src = '/static/sound/midrock.jpg';
+      if (maxDirt >= WARNING_DIRT_PERCENT) {
+        rockImage.src = ASSET_PATHS.mid;
         rockStatusPill.textContent = 'Mid Rock';
         rockStatusPill.style.background = '#fef3c7';
         rockStatusPill.style.color = '#b45309';
-        rockLevelText.textContent = '50–99%';
-        rockCaption.textContent = 'Visibility is getting worse. Rock is no longer impressed.';
+        rockLevelText.textContent = `≥ ${WARNING_DIRT_PERCENT}%`;
+        rockCaption.textContent = 'Dirt is getting worse. Rock is no longer impressed.';
         return;
       }
 
-      rockImage.src = '/static/sound/happyrock.jpg';
+      rockImage.src = ASSET_PATHS.happy;
       rockStatusPill.textContent = 'Happy Rock';
       rockStatusPill.style.background = '#dcfce7';
       rockStatusPill.style.color = '#15803d';
-      rockLevelText.textContent = '0–49%';
-      rockCaption.textContent = 'Visibility is good. Rock is calm.';
+      rockLevelText.textContent = `< ${WARNING_DIRT_PERCENT}%`;
+      rockCaption.textContent = 'Dirt levels are low. Rock is calm.';
     }
 
-    function applyValue(v) {
-      v = Math.max(0, Math.min(100, v));
-      const roundedValue = Math.round(v);
+    let currentSectorValues = [0, 0, 0, 0, 0];
+    let animationFrameId = null;
 
-      drawGauge(v);
+    function applySectorValues(values) {
+      const sectorValues = normalizeSectorValues(values);
+      currentSectorValues = sectorValues;
+
+      const overallValue = calculateOverallDirtiness(sectorValues);
+      const roundedValue = Math.round(overallValue);
+
+      drawGauge(overallValue);
 
       pctText.textContent = roundedValue + '%';
-      pctText.style.color = getValueColor(v);
+      pctText.style.color = getValueColor(overallValue);
 
       const ps = getPillStyle(roundedValue);
       pill.textContent = ps.label;
@@ -1137,37 +1156,34 @@
       slider.value = roundedValue;
       sliderVal.textContent = roundedValue;
 
-      const segments = updateRadarFromMeterValue(v);
-      updateRockStatus(v, segments);
+      const segments = updateRadarFromSectorValues(sectorValues);
+      updateRockStatus(segments);
     }
 
-    async function postValue(v) {
+    async function postSectorValues(values) {
       try {
-        await fetch('/api/dirt', {
+        await fetch('/api/sectors', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ value: Math.round(v) }),
+          body: JSON.stringify({ sectors: normalizeSectorValues(values) }),
         });
       } catch (error) {
-        console.log('Could not post value to backend:', error);
+        console.log('Could not post sector values to backend:', error);
       }
     }
 
-    async function fetchValueFromBackend() {
+    async function fetchSectorValuesFromBackend() {
       try {
-        const response = await fetch('/api/dirt');
+        const response = await fetch('/api/sectors');
         const data = await response.json();
 
-        if (typeof data.value === 'number') {
-          animateToValue(data.value);
+        if (Array.isArray(data.sectors)) {
+          animateToSectorValues(data.sectors);
         }
       } catch (error) {
-        console.log('Could not fetch value from backend:', error);
+        console.log('Could not fetch sector values from backend:', error);
       }
     }
-
-    let currentDisplayValue = 0;
-    let animationFrameId = null;
 
     function easeInOutCubic(t) {
       return t < 0.5
@@ -1175,10 +1191,9 @@
         : 1 - Math.pow(-2 * t + 2, 3) / 2;
     }
 
-    function animateToValue(targetValue) {
-      targetValue = Math.max(0, Math.min(100, targetValue));
-
-      const startValue = currentDisplayValue;
+    function animateToSectorValues(targetValues) {
+      const cleanTargetValues = normalizeSectorValues(targetValues);
+      const startValues = currentSectorValues.slice();
       const startTime = performance.now();
 
       if (animationFrameId !== null) {
@@ -1190,17 +1205,16 @@
         const progress = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
         const easedProgress = easeInOutCubic(progress);
 
-        const animatedValue =
-          startValue + (targetValue - startValue) * easedProgress;
+        const animatedValues = cleanTargetValues.map((target, index) => {
+          return startValues[index] + (target - startValues[index]) * easedProgress;
+        });
 
-        currentDisplayValue = animatedValue;
-        applyValue(animatedValue);
+        applySectorValues(animatedValues);
 
         if (progress < 1) {
           animationFrameId = requestAnimationFrame(step);
         } else {
-          currentDisplayValue = targetValue;
-          applyValue(targetValue);
+          applySectorValues(cleanTargetValues);
           animationFrameId = null;
         }
       }
@@ -1208,55 +1222,57 @@
       animationFrameId = requestAnimationFrame(step);
     }
 
-    const demoValues = Array.from({ length: DEMO_INSTANCE_COUNT }, () => {
-      return Math.floor(Math.random() * 100) + 1;
+    const demoSectorValues = Array.from({ length: DEMO_INSTANCE_COUNT }, () => {
+      return Array.from({ length: N_SECTORS }, () => {
+        return Math.floor(Math.random() * 101);
+      });
     });
 
     let currentInstanceIndex = 0;
 
     function showNextDemoInstance() {
-      const targetValue = demoValues[currentInstanceIndex];
+      const targetValues = demoSectorValues[currentInstanceIndex];
 
       instanceText.textContent =
-        `Instance ${currentInstanceIndex + 1} / ${demoValues.length}`;
+        `Instance ${currentInstanceIndex + 1} / ${demoSectorValues.length}`;
 
-      animateToValue(targetValue);
+      animateToSectorValues(targetValues);
 
       if (SEND_DEMO_VALUES_TO_BACKEND) {
-        postValue(targetValue);
+        postSectorValues(targetValues);
       }
 
       currentInstanceIndex++;
 
-      if (currentInstanceIndex >= demoValues.length) {
+      if (currentInstanceIndex >= demoSectorValues.length) {
         currentInstanceIndex = 0;
       }
     }
 
     slider.addEventListener('input', () => {
       const v = parseInt(slider.value, 10);
+      const values = Array.from({ length: N_SECTORS }, () => v);
 
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
       }
 
-      currentDisplayValue = v;
-      applyValue(v);
-      postValue(v);
+      applySectorValues(values);
+      postSectorValues(values);
       instanceText.textContent = 'Manual override';
     });
 
-    applyValue(0);
+    applySectorValues([0, 0, 0, 0, 0]);
 
     if (DEMO_MODE) {
       modeText.textContent = 'Demo mode · animated every second';
       showNextDemoInstance();
       setInterval(showNextDemoInstance, DEMO_INSTANCE_EVERY_MS);
     } else {
-      modeText.textContent = 'Live mode · polling backend';
-      fetchValueFromBackend();
-      setInterval(fetchValueFromBackend, BACKEND_POLL_INTERVAL_MS);
+      modeText.textContent = 'Live mode · polling /api/sectors';
+      fetchSectorValuesFromBackend();
+      setInterval(fetchSectorValuesFromBackend, BACKEND_POLL_INTERVAL_MS);
     }
   </script>
 </body>
