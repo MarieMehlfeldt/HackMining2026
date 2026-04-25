@@ -16,7 +16,7 @@ N_SECTORS = 5
 
 # You can change these later
 WARNING_DIRT_PERCENT = 50
-CRITICAL_DIRT_PERCENT = 90
+CRITICAL_DIRT_PERCENT = 75
 
 DIRT_MULTIPLIER = 4.0
 
@@ -127,7 +127,7 @@ class LidarProcessor(Node):
             self.state = 'DANGER'
         elif max_dirt >= WARNING_DIRT_PERCENT:
             self.state = 'WARN'
-        elif max_dirt > 0:
+        elif max_dirt > 20:
             self.state = 'SAFE'
         else:
             self.state = 'CLEAN'
