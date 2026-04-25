@@ -24,7 +24,7 @@ def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame
     distance_deriv_all = distance_now_all - distance_pre_all
     is_dirty_all = (distance_now_all < threshold_distance) & (
         (distance_deriv_all < threshold_deriv) | (reflectivity_all < threshold_reflect)
-    )
+    ).flatten()
 
     sectors_all = np.minimum((cols * n_sectors) // width, n_sectors - 1)
 
@@ -42,8 +42,8 @@ def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame
         cluster_coords = coords_now_all[cluster_mask]
 
         if cluster == -1:
-            noise_dirty_coords = cluster_coords[cluster_dirty_mask]
-            noise_clean_coords = cluster_coords[~cluster_dirty_mask]
+            noise_dirty_coords = cluster_coords[cluster_dirty_mask,:]
+            noise_clean_coords = cluster_coords[~cluster_dirty_mask,:]
 
             coords_dirty_points.extend(noise_dirty_coords)
             coords_clean_points.extend(noise_clean_coords)
