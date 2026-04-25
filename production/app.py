@@ -13,6 +13,11 @@ import requests
 from . import cloud_state
 
 
+from threading import Lock, Thread
+
+# Add this near your other globals at the top of app.py
+_processing_lock = Lock()
+
 app = Flask(__name__)
 
 SETTINGS = AppSettings()
@@ -79,8 +84,6 @@ def health() -> Any:
 
 @app.post("/matrices")
 def receive_matrices() -> Any:
-    """Receive and validate the three required matrices from the allowed sender IP,
-    then launch the processing pipeline in a background thread."""
     global _latest_matrices, _old_matrices
 
     client_ip = _get_client_ip()
@@ -95,7 +98,7 @@ def receive_matrices() -> Any:
     if missing:
         return jsonify({"error": f"Missing required matrices: {missing}"}), 400
 
-
+    # 1. Parse the incoming JSON into the `matrices` dictionary
     try:
         matrices = {
             name: _parse_matrix(payload[name], expected_shape, name)
@@ -104,42 +107,37 @@ def receive_matrices() -> Any:
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    # 2. Save it to the global state safely
     with _store_lock:
-        global _latest_matrices
-        global _old_matrices
         _old_matrices = _latest_matrices
         _latest_matrices = matrices
 
-    Thread(target=process_frame, args=(matrices, _old_matrices, SETTINGS)).start()
-    # print("Received matrices, starting processing thread...")
-    # process_frame(matrices, _old_matrices, SETTINGS)
+    # 3. Check if the pipeline is busy. If it is, drop the frame.
+    if not _processing_lock.acquire(blocking=False):
+        print("Pipeline is busy (exceeded processing time). Dropping frame.")
+        return jsonify({
+            "status": "dropped",
+            "reason": "pipeline busy processing previous frame"
+        }), 429
 
-    try:
-        return jsonify(
-            {
-                "status": "received",
-                "sender_ip": client_ip,
-                "shapes": {name: list(arr.shape) for name, arr in matrices.items()},
-            })
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    # 4. Define the background task that safely releases the lock when done
+    def background_task(curr, old, sett):
+        try:
+            process_frame(curr, old, sett)
+        finally:
+            _processing_lock.release()
 
-    with _store_lock:
-        _old_matrices    = _latest_matrices
-        _latest_matrices = matrices
-
+    # 5. Launch the protected processing thread
     Thread(
-        target=process_frame,
+        target=background_task,
         args=(matrices, _old_matrices, SETTINGS),
         daemon=True
     ).start()
 
-    print("Received matrices, starting processing thread...")
-
     return jsonify({
-        "status":    "received",
+        "status": "received",
         "sender_ip": client_ip,
-        "shapes":    {name: list(arr.shape) for name, arr in matrices.items()},
+        "shapes": {name: list(arr.shape) for name, arr in matrices.items()},
     })
 
 
