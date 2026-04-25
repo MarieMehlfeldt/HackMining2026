@@ -80,17 +80,22 @@ def get_lidar_data(file:Path):
                 shape=(n_blocks, 3*4),  # 3 coordinates, each 4 bytes (float32)
                 strides=(blocksize * buffer.strides[0], buffer.strides[0]),
                 writeable=False,
-                ).view(np.float32).reshape((msg.height, msg.width, 3), order="F")
+                ).view(np.float32).reshape((msg.height, msg.width, 3), order="C")
             intensity = np.lib.stride_tricks.as_strided(
                 buffer[intensity_offset:], shape=(n_blocks, 4),
                 strides=(blocksize * buffer.strides[0], buffer.strides[0]),
                 writeable=False).view(intensity_dtype).reshape(
-                    (msg.height, msg.width), order="F")
+                    (msg.height, msg.width), order="C")
             reflectivity = np.lib.stride_tricks.as_strided(
                 buffer[reflectivity_offset:], shape=(n_blocks, 2),
                 strides=(blocksize * buffer.strides[0], buffer.strides[0]),
                 writeable=False).view(reflectivity_dtype).reshape(
-                    (msg.height, msg.width), order="F")
+                    (msg.height, msg.width), order="C")
+            # time = np.lib.stride_tricks.as_strided(
+            #     buffer[16:], shape=(n_blocks, 4),
+            #     strides=(blocksize * buffer.strides[0], buffer.strides[0]),
+            #     writeable=False).view(np.uint32).reshape(
+            #        (msg.height, msg.width), order="C")
             yield coords, intensity, reflectivity
 
 if __name__ == "__main__":
