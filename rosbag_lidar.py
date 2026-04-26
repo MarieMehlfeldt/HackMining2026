@@ -1,4 +1,4 @@
-"""Rosbag reading utilities for Lidar data."""
+"""Rosbag reading utilities for Lidar data from local rosbag files."""
 from pathlib import Path
 
 import numpy as np

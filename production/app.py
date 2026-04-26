@@ -204,9 +204,6 @@ def poll_upstream_forever():
 
 
 def main(args=None):
-    # Uncomment to enable upstream polling instead of receiving POST requests:
-    # Thread(target=poll_upstream_forever, daemon=True).start()
-
     host  = os.getenv("FLASK_HOST",  "0.0.0.0")
     port  = int(os.getenv("FLASK_PORT",  "5001"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"

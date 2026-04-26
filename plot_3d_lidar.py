@@ -1,15 +1,30 @@
+"""This code uses an offline rosbag file and plots it as a 3D point cloud using open3d.
+
+Additionally, it uses a segmenter that tracks clusters in the point cloud.
+
+An important parameter is also the maximum distance that reduces the number of points
+based on the distance to the sensor found in max_dist."""
+
 from functools import partial
 from pathlib import Path
 import time
 from typing import Any, Callable, Iterable, Literal
 import warnings
+import cv2
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import open3d as o3d
-from lidar_segmentation import detect_planes, detect_dbscan, DBSegmenter, MockSegmenter
+from lidar_segmentation import DBSegmenter, MockSegmenter
 from rosbag_lidar import get_lidar_data
+
+CAMERA_WIDTH = 1920
+CAMERA_HEIGHT = 1137
+CAMERA_FX = 984.67088410290683
+CAMERA_FY = 984.67088410290683
+CAMERA_CX = 959.5
+CAMERA_CY = 568.0
 
 def _resolve_cmap(
         values: np.ndarray,
@@ -110,6 +125,8 @@ def _prepare_cloud_frame(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Flatten and downsample one lidar frame for plotting."""
     coords, intensity, reflectivity = frame
+    coords = coords.copy()
+    coords[:,:,[1,2]] = -coords[:,:,[1,2]]
     points = coords.reshape(-1, 3)
     indices = np.arange(points.shape[0], dtype=np.uint32)
     if color_coding == "intensity":
@@ -155,6 +172,7 @@ def play_lidar_video_open3d(
         fps: float = 20.0,
         loop: bool = True,
         max_frames: int | None = None,
+        output_mp4_path: Path | None = None,
         color_coding:Literal["intensity", "distance", "reflectivity"] = "distance",
         cmap: str | object = "turbo",
         norm: mcolors.Normalize | None = None,
@@ -194,16 +212,37 @@ def play_lidar_video_open3d(
             raise ValueError("Input iterator did not contain any frames")
         bag_path = None
         win_name = "Lidar Playback - Iterable Input"
+    if output_mp4_path is None:
+        if bag_path is not None:
+            output_mp4_path = Path(f"{bag_path.stem}_open3d.mp4")
+        else:
+            output_mp4_path = Path("open3d_capture.mp4")
 
     vis = visualizer_cls()
 
-    vis.create_window(window_name=win_name, width=1280, height=800)
+    vis.create_window(window_name=win_name, width=CAMERA_WIDTH, height=CAMERA_HEIGHT)
     render_opt = vis.get_render_option()
     render_opt.point_size = 2.5
     render_opt.background_color = np.array([0.02, 0.02, 0.02], dtype=np.float64)
     point_color_option = getattr(o3dv, "PointColorOption", None)
     if point_color_option is not None:
         render_opt.point_color_option = getattr(point_color_option, "Color")
+
+    # Apply the requested camera intrinsic settings while preserving current extrinsic pose.
+    view_control = vis.get_view_control()
+    camera_params = view_control.convert_to_pinhole_camera_parameters()
+    camera_params.intrinsic = o3d.camera.PinholeCameraIntrinsic(
+        CAMERA_WIDTH,
+        CAMERA_HEIGHT,
+        CAMERA_FX,
+        CAMERA_FY,
+        CAMERA_CX,
+        CAMERA_CY,
+    )
+    try:
+        view_control.convert_from_pinhole_camera_parameters(camera_params, allow_arbitrary=True)
+    except TypeError:
+        view_control.convert_from_pinhole_camera_parameters(camera_params)
 
     cloud = o3d.geometry.PointCloud()
     geometry_added = False
@@ -212,8 +251,27 @@ def play_lidar_video_open3d(
     origin_geom = None
     axis_geom = None
     frame_interval = 1.0 / fps
-    segmenter = DBSegmenter(eps=0.03, min_points=5, vmax=50.0)
+    segmenter = DBSegmenter(eps=0.1, min_points=10, vmax=50.0)
     # segmenter = MockSegmenter()
+    video_writer = None
+    recorded_once = False
+
+    def capture_frame_to_mp4() -> None:
+        nonlocal video_writer
+        if output_mp4_path is None:
+            return
+        frame = np.asarray(vis.capture_screen_float_buffer(do_render=False), dtype=np.float32)
+        if frame.size == 0:
+            return
+        frame_uint8 = np.clip(frame * 255.0, 0, 255).astype(np.uint8)
+        frame_bgr = cv2.cvtColor(frame_uint8, cv2.COLOR_RGB2BGR)
+        h, w = frame_bgr.shape[:2]
+        if video_writer is None:
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            video_writer = cv2.VideoWriter(str(output_mp4_path), fourcc, fps, (w, h))
+            if not video_writer.isOpened():
+                raise RuntimeError(f"Could not open video writer for {output_mp4_path}")
+        video_writer.write(frame_bgr)
 
     if isinstance(input_, Path):
         from rosbag_lidar import get_lidar_data
@@ -297,6 +355,7 @@ def play_lidar_video_open3d(
                                              cluster_callback=cluster_callback)
                     if display_out is None:
                         return
+                    capture_frame_to_mp4()
                     frame_count += 1
                     if not wait_for_next_frame(deadline, vis):
                         return
@@ -309,15 +368,25 @@ def play_lidar_video_open3d(
                     vis.update_renderer()
                     if not vis.poll_events():
                         return
+                    if not recorded_once:
+                        capture_frame_to_mp4()
                     frame_count += 1
                     if not wait_for_next_frame(deadline, vis):
                         return
             if frame_count == 0:
                 raise ValueError("No valid frames were rendered")
 
+            if not recorded_once and video_writer is not None:
+                video_writer.release()
+                video_writer = None
+                recorded_once = True
+                print(f"Saved Open3D capture to {output_mp4_path} at {fps:.0f} FPS")
+
             if not loop:
                 break
     finally:
+        if video_writer is not None:
+            video_writer.release()
         vis.destroy_window()
 
 
@@ -331,10 +400,11 @@ if __name__ == "__main__":
             continue
         try:
             play_lidar_video_open3d(file_,
+                                    fps=20,
                                     crit = 0.1,
-                                    color_coding="reflectivity",
-                                    cmap="berlin",
+                                    color_coding="distance",
+                                    cmap="turbo",
                                     min_dist=0.0,
-                                    max_dist=0.3)
+                                    max_dist=2)
         except Exception as e:
             print(f"Error processing {file_}: {e}")
