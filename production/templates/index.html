@@ -277,7 +277,8 @@
       if (v < 70) return { bg: '#fef3c7', fg: '#b45309', label: 'Partially Dirty' };
       return           { bg: '#fee2e2', fg: '#b91c1c', label: 'Very Dirty' };
     }
-    function valueToAngle(v) { return Math.PI * (1 - v / 100); }
+    const GAUGE_MAX = 50;
+    function valueToAngle(v) { return Math.PI * (1 - v / GAUGE_MAX); }
 
     const TICK_COUNT = 101, TICK_LEN = 13, TICK_GAP = 2, TICK_W_ON = 3.5, TICK_W_OFF = 2, LABEL_DIST = R + 16;
 
@@ -285,9 +286,9 @@
       ctx.clearRect(0, 0, W, H);
       for (let i = 0; i < TICK_COUNT; i++) {
         const t = i / (TICK_COUNT - 1);
-        const tickValue = t * 100;
+        const tickValue = t * GAUGE_MAX;
         const angle = valueToAngle(tickValue);
-        const active = tickValue <= value;
+        const active = tickValue <= Math.min(value, GAUGE_MAX);
         const cosA = Math.cos(angle), sinA = -Math.sin(angle);
         ctx.beginPath();
         ctx.moveTo(CX + (R - TICK_GAP) * cosA, CY + (R - TICK_GAP) * sinA);
@@ -300,9 +301,8 @@
       ctx.font = '500 10.5px "DM Sans", Arial, sans-serif';
       ctx.fillStyle = '#9aa0ae';
       ctx.textBaseline = 'middle';
-      [{ v: 0, text: '0' }, { v: 25, text: '25' }, { v: 50, text: '50' }, { v: 75, text: '75' }, { v: 100, text: '100' }].forEach(({ v, text }) => {
-        const angle = valueToAngle(v);
-        ctx.textAlign = v === 50 ? 'center' : v < 50 ? 'right' : 'left';
+      [{ v: 0, text: '0' }, { v: 12.5, text: '12' }, { v: 25, text: '25' }, { v: 37.5, text: '37' }, { v: 50, text: '50' }].forEach(({ v, text }) => {
+        ctx.textAlign = v === 25 ? 'center' : v < 25 ? 'right' : 'left';
         ctx.fillText(text, CX + LABEL_DIST * Math.cos(angle), CY - LABEL_DIST * Math.sin(angle));
       });
     }
