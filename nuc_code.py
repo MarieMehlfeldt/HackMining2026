@@ -1,4 +1,5 @@
 import json
+from threading import Thread
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
@@ -6,10 +7,85 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
+from std_msgs.msg import Int32
+import requests
+import time
 import numpy as np
 
 # Flask server endpoint to receive matrices
 FLASK_SERVER_URL = "http://192.168.0.101:5001/matrices"
+
+WARNING_DIRT_PERCENT = 50
+CRITICAL_DIRT_PERCENT = 75
+
+FLASK_IP = "192.168.0.101"
+FLASK_PORT = "5001"
+API_URL = f"http://{FLASK_IP}:{FLASK_PORT}/api/data"
+
+def publish_color(publisher, state, prev_color):
+    msg = Int32()
+    color = 4
+    if state == 'CLEAN':
+        color = 4
+    elif state == 'SAFE':
+        color = 2
+    elif state == 'WARN':
+        color = 3
+    elif state == 'DANGER':
+        if prev_color == 1:
+            color = 0
+        else:
+            color = 1
+    else:
+        color = 7
+
+    msg.data = color
+    publisher.publish(msg)
+    return color
+
+def fetch_dirt_levels(publisher):
+    color = 7
+    while True:
+        time.sleep(0.5)
+        try:
+            # Request the data with a 2-second timeout so it doesn't hang if the server drops
+            response = requests.get(API_URL, timeout=2.0)
+            response.raise_for_status() 
+            
+            # Parse the JSON payload
+            data = response.json()
+            
+            # Extract just the sector percentages, ignoring the massive "clean" and "dirty" point arrays
+            sectors = data.get("sectors", [])
+            
+            if not sectors:
+                continue
+            # Calculate single-number metrics (matching your frontend logic)
+            avg_dirt = sum(sectors) / len(sectors)
+            max_dirt = max(sectors)
+            
+            print(f"Raw Sectors: {sectors}")
+            print(f"Average Dirtiness: {avg_dirt:.1f}% | Max Sector: {max_dirt:.1f}%")
+            print("-" * 40)
+
+            if max_dirt >= CRITICAL_DIRT_PERCENT:
+                state = 'DANGER'
+            elif max_dirt >= WARNING_DIRT_PERCENT:
+                state = 'WARN'
+            elif max_dirt > 20:
+                state = 'SAFE'
+            else:
+                state = 'CLEAN'
+            
+            color = publish_color(publisher, state, color)
+            
+        except requests.exceptions.ConnectionError:
+            print(f"Failed to connect to {API_URL}. Is the server running?")
+        except requests.exceptions.Timeout:
+            print("Request timed out.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        continue
 
 
 class LidarProcessor(Node):
@@ -23,7 +99,47 @@ class LidarProcessor(Node):
             rclpy.qos.qos_profile_sensor_data
         )
 
+        self.publisher = self.create_publisher(
+            Int32,
+            '/trafic_light_color',
+            10
+        )
+        self.lamp_thread = Thread(target=fetch_dirt_levels, args=(self.publisher,), daemon=True)
+        self.lamp_thread.start()
+
         self.flask_url = FLASK_SERVER_URL
+    
+    def publish_color(self):
+        msg = Int32()
+
+        if self.state == 'CLEAN':
+            self.color = 4
+        elif self.state == 'SAFE':
+            self.color = 2
+        elif self.state == 'WARN':
+            self.color = 3
+        elif self.state == 'DANGER':
+            if self.color == 1:
+                self.color = 0
+            else:
+                self.color = 1
+        else:
+            self.color = 7
+
+        msg.data = self.color
+        self.publisher.publish(msg)
+
+    def update_state_from_dirt(self, dirt):
+        max_dirt = float(np.max(dirt))
+
+        if max_dirt >= CRITICAL_DIRT_PERCENT:
+            self.state = 'DANGER'
+        elif max_dirt >= WARNING_DIRT_PERCENT:
+            self.state = 'WARN'
+        elif max_dirt > 20:
+            self.state = 'SAFE'
+        else:
+            self.state = 'CLEAN'
 
     def push_matrices_to_flask(self, coords, intensity, reflectivity):
         """Send the three matrices to the Flask server."""
