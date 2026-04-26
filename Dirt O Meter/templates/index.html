@@ -484,6 +484,13 @@
       </div>
       <div class="rock-display" id="rockDisplay" style="display:none; margin-top: 20px; text-align: center;">
         <img id="rockImage" src="" alt="Rock status" style="width: 80%; border-radius: 12px; object-fit: contain;" />
+        <div id="rockCaption" style="
+          margin-top: 10px;
+          font-size: 13px;
+          font-style: italic;
+          color: #7a8090;
+          font-family: 'DM Sans', Arial, sans-serif;
+        "></div>
       </div>
     </div>
  
@@ -534,7 +541,12 @@
     </div>
  
     <!-- ── RIGHT CARD: Placeholder (2/5) ─────────────────────────────────────── -->
-    <div class="card pointcloud-card">
+    <div class="card pointcloud-card" style="position: relative;">
+      <img
+        src="{{ url_for('static', filename='LOGOTeamBLACK.jpg') }}"
+        alt="Logo"
+        style="position: absolute; top: 20px; right: 20px; height: 32px; object-fit: contain; z-index: 10;"
+      />
       <div class="header">
         <div class="title">3D Point Cloud</div>
         <div class="subtitle">Live LiDAR view · 30 cm radius</div>
@@ -881,15 +893,15 @@
       });
  
       if (criticalCount > 0) {
-        radarStatus.textContent        = 'Critical dirt level detected';
+        radarStatus.textContent        = 'Sensor contamination critical';
         radarStatus.style.background   = '#fee2e2';
         radarStatus.style.color        = '#b91c1c';
       } else if (maxDirt >= WARNING_DIRT_PERCENT) {
-        radarStatus.textContent        = 'Sensor level elevated';
+        radarStatus.textContent        = 'Sensor contaminated';
         radarStatus.style.background   = '#fef3c7';
         radarStatus.style.color        = '#b45309';
       } else {
-        radarStatus.textContent        = 'Sensor levels mostly clean';
+        radarStatus.textContent        = 'Sensor mostly clean';
         radarStatus.style.background   = '#dcfce7';
         radarStatus.style.color        = '#15803d';
       }
@@ -905,6 +917,7 @@
     // ── Rock overlay (Sus Rock only) ────────────────────────────────────────────
     const rockDisplay = document.getElementById('rockDisplay');
     const rockImage   = document.getElementById('rockImage');
+    const rockCaption = document.getElementById('rockCaption');
     const juniorMinorToggle = document.getElementById('juniorMinorToggle'); 
     const blockedAlertSound = new Audio(ASSET_PATHS.blocked);
     blockedAlertSound.volume = 0.75;
@@ -946,14 +959,17 @@
       rockDisplay.style.display = 'block';
 
       if (critical) {
-        rockImage.src = ASSET_PATHS.sus;
+        Image.src = ASSET_PATHS.sus;
+        rockCaption.textContent = "Rock is angry";
       if (!wasCritical) playCriticalSound();
         wasCritical = true;
       } else if (maxDirt >= WARNING_DIRT_PERCENT) {
         rockImage.src = ASSET_PATHS.mid;
+        rockCaption.textContent = "Rock is worried";  
         wasCritical = false;
       } else {
         rockImage.src = ASSET_PATHS.happy;
+        rockCaption.textContent = "Rock is calm";
         wasCritical = false;
       }
     }
