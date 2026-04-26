@@ -8,7 +8,6 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 from std_msgs.msg import Int32
-import requests
 import time
 import numpy as np
 
@@ -49,11 +48,11 @@ def fetch_dirt_levels(publisher):
         time.sleep(0.5)
         try:
             # Request the data with a 2-second timeout so it doesn't hang if the server drops
-            response = requests.get(API_URL, timeout=2.0)
-            response.raise_for_status() 
+            request = Request(API_URL, method="GET")
+            response = urlopen(request, timeout=2.0)
             
             # Parse the JSON payload
-            data = response.json()
+            data = json.loads(response.read().decode("utf-8"))
             
             # Extract just the sector percentages, ignoring the massive "clean" and "dirty" point arrays
             sectors = data.get("sectors", [])
@@ -79,9 +78,9 @@ def fetch_dirt_levels(publisher):
             
             color = publish_color(publisher, state, color)
             
-        except requests.exceptions.ConnectionError:
+        except URLError:
             print(f"Failed to connect to {API_URL}. Is the server running?")
-        except requests.exceptions.Timeout:
+        except TimeoutError:
             print("Request timed out.")
         except Exception as e:
             print(f"An error occurred: {e}")
