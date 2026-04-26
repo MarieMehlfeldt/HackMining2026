@@ -87,8 +87,6 @@
     }
  
     /* ─── Gauge card internals ───────────────────────────────────────────────── */
- 
-    /* Wrapper that holds the canvas + the sus-rock overlay on top */
     .gauge-wrap {
       position: relative;
       display: flex;
@@ -100,6 +98,19 @@
     #gauge {
       display: block;
       max-width: 100%;
+    }
+
+    /* Overlaid readout inside the gauge arc */
+    .gauge-overlay {
+      position: absolute;
+      bottom: 24px;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      pointer-events: none;
     }
  
     /* Sus-rock overlay — hidden by default, shown when rock mode is active + critical */
@@ -129,17 +140,6 @@
       border-radius: 8px;
     }
  
-    /* Percentage readout */
-    .readout {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      margin-top: 8px;
-      margin-bottom: 4px;
-      width: 100%;
-    }
- 
     .pct {
       font-family: 'DM Mono', monospace;
       font-size: clamp(32px, 4vw, 52px);
@@ -158,7 +158,7 @@
     }
  
     .instance {
-      margin-top: 6px;
+      margin-top: 2px;
       font-family: 'DM Mono', monospace;
       font-size: 11px;
       color: #7a8090;
@@ -172,7 +172,7 @@
       margin: 16px 0 14px;
     }
  
-    /* Junior Minor toggle */
+    /* Rock Mode toggle */
     .feature-toggle {
       width: 100%;
       background: #f8fafc;
@@ -198,7 +198,7 @@
       text-transform: uppercase;
       letter-spacing: 0.7px;
     }
- 
+
     .toggle-subtitle {
       font-size: 10.5px;
       color: #7a8090;
@@ -321,12 +321,12 @@
       font-family: 'DM Mono', monospace;
       color: #111827;
     }
- 
+
     /* ─── Placeholder card ───────────────────────────────────────────────────── */
     .placeholder-card .header {
       margin-bottom: 0;
     }
- 
+
     .placeholder-body {
       flex: 1;
       width: 100%;
@@ -340,68 +340,7 @@
       font-size: 13px;
       font-weight: 500;
     }
- 
-    /* ─── Manual override (floating — delete entire block to remove) ─────────── */
-    #manualOverride {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid #eef0f4;
-      border-radius: 14px;
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.10);
-      z-index: 200;
-      font-size: 11px;
-      color: #7a8090;
-      font-family: 'DM Sans', Arial, sans-serif;
-    }
- 
-    #manualOverride label {
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      white-space: nowrap;
-    }
- 
-    #manualOverride input[type=range] {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 140px;
-      height: 5px;
-      border-radius: 3px;
-      background: #e4e7ee;
-      outline: none;
-      cursor: pointer;
-    }
- 
-    #manualOverride input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: #fff;
-      border: 2px solid #c0c6d0;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-    }
- 
-    #sliderVal {
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-      font-weight: 500;
-      color: #1a1d23;
-      min-width: 24px;
-    }
- 
-    #modeText {
-      font-size: 10px;
-      color: #b0b7c3;
-      white-space: nowrap;
-    }
- 
+
     /* ─── Animations ─────────────────────────────────────────────────────────── */
     @keyframes blink {
       0%, 100% { opacity: 1; }
@@ -436,41 +375,26 @@
 </head>
  
 <body>
- 
-  <!-- ═══════════════════════════════════════════════════════════════════════════
-       MANUAL OVERRIDE — floating test slider
-       To remove: delete from here to the closing div tag below
-       ═══════════════════════════════════════════════════════════════════════════ -->
-  <div id="manualOverride">
-    <label>Manual Override</label>
-    <input type="range" id="slider" min="0" max="100" value="0" />
-    <span id="sliderVal">0</span>
-    <span id="modeText"></span>
-  </div>
-  <!-- ═══════════════════════════════════════════════════════════════════════════
-       END MANUAL OVERRIDE
-       ═══════════════════════════════════════════════════════════════════════════ -->
- 
+
   <div class="dashboard">
  
-    <!-- ── LEFT CARD: Dirt-O-Meter + Rock overlay (1/5) ──────────────────────── -->
+    <!-- ── LEFT CARD: Dirt-O-Meter (1/5) ─────────────────────────────────────── -->
     <div class="card gauge-card">
       <div class="header">
         <div class="title">Dirt-O-Meter</div>
         <div class="subtitle">Average LiDAR sector dirtiness</div>
       </div>
- 
-      <!-- Gauge canvas with Sus-Rock overlay sitting on top -->
+
+      <!-- Gauge canvas with percent + pill overlaid inside the arc -->
       <div class="gauge-wrap">
         <canvas id="gauge"></canvas>
+        <div class="gauge-overlay">
+          <div class="pct" id="pctText">0%</div>
+          <div class="pill" id="pill">Clean</div>
+          <div class="instance" id="instanceText">Waiting for data</div>
+        </div>
       </div>
- 
-      <div class="readout">
-        <div class="pct" id="pctText">0%</div>
-        <div class="pill" id="pill">Clean</div>
-        <div class="instance" id="instanceText">Waiting for data</div>
-      </div>
- 
+
       <div class="divider"></div>
  
       <div class="feature-toggle">
@@ -482,15 +406,25 @@
           <span class="switch-slider"></span>
         </label>
       </div>
-      <div class="rock-display" id="rockDisplay" style="display:none; margin-top: 20px; text-align: center;">
+
+      <div class="rock-display" id="rockDisplay" style="display:none; margin-top: 12px; text-align: center;">
         <img id="rockImage" src="" alt="Rock status" style="width: 80%; border-radius: 12px; object-fit: contain;" />
-        <div id="rockCaption" style="
-          margin-top: 10px;
-          font-size: 13px;
-          font-style: italic;
-          color: #7a8090;
-          font-family: 'DM Sans', Arial, sans-serif;
-        "></div>
+        <div style="margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <div id="rockPill" style="
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            padding: 4px 14px;
+            border-radius: 100px;
+          "></div>
+          <div id="rockCaption" style="
+            font-size: 13px;
+            font-style: italic;
+            color: #7a8090;
+            font-family: 'DM Sans', Arial, sans-serif;
+          "></div>
+        </div>
       </div>
     </div>
  
@@ -540,7 +474,7 @@
       </div>
     </div>
  
-    <!-- ── RIGHT CARD: Placeholder (2/5) ─────────────────────────────────────── -->
+    <!-- ── RIGHT CARD: 3D Point Cloud (2/5) ──────────────────────────────────── -->
     <div class="card pointcloud-card" style="position: relative;">
       <img
         src="{{ url_for('static', filename='LOGOTeamBLACK.jpg') }}"
@@ -558,18 +492,18 @@
  
   <script>
     // ── Configuration constants ─────────────────────────────────────────────────
-    const DEMO_MODE                  = false;
+    const DEMO_MODE                   = false;
     const SEND_DEMO_VALUES_TO_BACKEND = true;
  
-    const N_SECTORS              = 5;
-    const CRITICAL_DIRT_PERCENT  = 80;   // ← change this to adjust Sus Rock trigger
-    const WARNING_DIRT_PERCENT   = 30;
+    const N_SECTORS             = 5;
+    const CRITICAL_DIRT_PERCENT = 80;   // ← change this to adjust Sus Rock trigger
+    const WARNING_DIRT_PERCENT  = 30;
  
     const OVERALL_DIRTINESS_MODE = 'average'; // 'average' | 'max'
  
-    const DEMO_INSTANCE_COUNT    = 200;
-    const DEMO_INSTANCE_EVERY_MS = 1000;
-    const ANIMATION_DURATION_MS  = 650;
+    const DEMO_INSTANCE_COUNT     = 200;
+    const DEMO_INSTANCE_EVERY_MS  = 1000;
+    const ANIMATION_DURATION_MS   = 650;
     const BACKEND_POLL_INTERVAL_MS = 500;
  
     const ASSET_PATHS = {
@@ -580,14 +514,14 @@
     };
  
     // ── Gauge setup ─────────────────────────────────────────────────────────────
-    const W          = Math.min(260, window.innerWidth * 0.18);
-    const SIDE_PAD   = 22;
+    const W            = Math.min(260, window.innerWidth * 0.18);
+    const SIDE_PAD     = 22;
     const LABEL_MARGIN = 20;
-    const BOTTOM_PAD = 20;
-    const R          = W / 2 - SIDE_PAD;
-    const CX         = W / 2;
-    const H          = LABEL_MARGIN + R + BOTTOM_PAD;
-    const CY         = LABEL_MARGIN + R;
+    const BOTTOM_PAD   = 20;
+    const R            = W / 2 - SIDE_PAD;
+    const CX           = W / 2;
+    const H            = LABEL_MARGIN + R + BOTTOM_PAD;
+    const CY           = LABEL_MARGIN + R;
  
     const canvas = document.getElementById('gauge');
     const ctx    = canvas.getContext('2d');
@@ -616,34 +550,38 @@
       return `rgb(${c.r},${c.g},${c.b})`;
     }
  
-    function getValueColor(v)  { return gradientColor(v / 100); }
- 
-    function getPillStyle(v) {
-      if (v < 30) return { bg: '#dcfce7', fg: '#15803d', label: 'Clean' };
-      if (v < 70) return { bg: '#fef3c7', fg: '#b45309', label: 'Partially Dirty' };
-      return           { bg: '#fee2e2', fg: '#b91c1c', label: 'Very Dirty' };
+    function getValueColor(v) { return gradientColor(v / 100); }
+
+    function getPillStyle(value) {
+      if (value >= CRITICAL_DIRT_PERCENT) return { label: juniorMinorEnabled ? 'Sus Rock'   : 'Very Dirty', bg: '#fee2e2', fg: '#dc2626' };
+      if (value >= WARNING_DIRT_PERCENT)  return { label: juniorMinorEnabled ? 'Mid Rock'   : 'Dirty',      bg: '#fef9c3', fg: '#ca8a04' };
+      return                                     { label: juniorMinorEnabled ? 'Happy Rock' : 'Clean',       bg: '#dcfce7', fg: '#16a34a' };
     }
- 
-    function valueToAngle(v) { return Math.PI * (1 - v / 100); }
- 
-    const TICK_COUNT  = 101;
-    const TICK_LEN    = 13;
-    const TICK_GAP    = 2;
-    const TICK_W_ON   = 3.5;
-    const TICK_W_OFF  = 2;
-    const LABEL_DIST  = R + 16;
- 
+
+    // ── Gauge drawing — max is 50% ──────────────────────────────────────────────
+    const GAUGE_MAX = 50;
+    function valueToAngle(v) { return Math.PI * (1 - v / GAUGE_MAX); }
+
+    const TICK_COUNT = 101;
+    const TICK_LEN   = 13;
+    const TICK_GAP   = 2;
+    const TICK_W_ON  = 3.5;
+    const TICK_W_OFF = 2;
+    const LABEL_DIST = R + 16;
+
     function drawGauge(value) {
       ctx.clearRect(0, 0, W, H);
- 
+
+      const clampedValue = Math.min(value, GAUGE_MAX);
+
       for (let i = 0; i < TICK_COUNT; i++) {
         const t         = i / (TICK_COUNT - 1);
-        const tickValue = t * 100;
+        const tickValue = t * GAUGE_MAX;
         const angle     = valueToAngle(tickValue);
-        const active    = tickValue <= value;
+        const active    = tickValue <= clampedValue;
         const cosA      = Math.cos(angle);
         const sinA      = -Math.sin(angle);
- 
+
         ctx.beginPath();
         ctx.moveTo(CX + (R - TICK_GAP)            * cosA, CY + (R - TICK_GAP)            * sinA);
         ctx.lineTo(CX + (R - TICK_GAP - TICK_LEN) * cosA, CY + (R - TICK_GAP - TICK_LEN) * sinA);
@@ -652,15 +590,15 @@
         ctx.strokeStyle = active ? gradientColor(t) : '#dde1e9';
         ctx.stroke();
       }
- 
+
       ctx.font         = '500 10.5px "DM Sans", Arial, sans-serif';
       ctx.fillStyle    = '#9aa0ae';
       ctx.textBaseline = 'middle';
- 
-      [{ v: 0, text: '0' }, { v: 25, text: '25' }, { v: 50, text: '50' },
-       { v: 75, text: '75' }, { v: 100, text: '100' }].forEach(({ v, text }) => {
+
+      [{ v: 0, text: '0' }, { v: 12.5, text: '12' }, { v: 25, text: '25' },
+       { v: 37.5, text: '37' }, { v: 50, text: '50' }].forEach(({ v, text }) => {
         const angle = valueToAngle(v);
-        ctx.textAlign = v === 50 ? 'center' : v < 50 ? 'right' : 'left';
+        ctx.textAlign = v === 25 ? 'center' : v < 25 ? 'right' : 'left';
         ctx.fillText(text, CX + LABEL_DIST * Math.cos(angle), CY - LABEL_DIST * Math.sin(angle));
       });
     }
@@ -669,8 +607,8 @@
     const pctText      = document.getElementById('pctText');
     const pill         = document.getElementById('pill');
     const instanceText = document.getElementById('instanceText');
- 
-    // Manual override elements — may be null if the override block is removed
+
+    // Manual override elements — null-safe in case block is removed
     const slider    = document.getElementById('slider');
     const sliderVal = document.getElementById('sliderVal');
     const modeText  = document.getElementById('modeText');
@@ -679,14 +617,14 @@
     const radarCanvas = document.getElementById('radar');
     const radarCtx    = radarCanvas.getContext('2d');
  
-    const RADAR_SIZE   = Math.min(300, window.innerWidth * 0.22);
-    const RADAR_W      = RADAR_SIZE;
-    const RADAR_H      = RADAR_SIZE + 30;
-    const RADAR_CX     = RADAR_W / 2;
-    const RADAR_CY     = RADAR_H / 2;
-    const RADAR_RADIUS = RADAR_SIZE * 0.45;
-    const RADAR_START_DEG  = -90;
-    const SECTOR_SIZE_DEG  = 360 / N_SECTORS;
+    const RADAR_SIZE      = Math.min(300, window.innerWidth * 0.22);
+    const RADAR_W         = RADAR_SIZE;
+    const RADAR_H         = RADAR_SIZE + 30;
+    const RADAR_CX        = RADAR_W / 2;
+    const RADAR_CY        = RADAR_H / 2;
+    const RADAR_RADIUS    = RADAR_SIZE * 0.45;
+    const RADAR_START_DEG = -90;
+    const SECTOR_SIZE_DEG = 360 / N_SECTORS;
  
     radarCanvas.width  = RADAR_W;
     radarCanvas.height = RADAR_H;
@@ -738,7 +676,7 @@
       if (OVERALL_DIRTINESS_MODE === 'max') return Math.max(...values);
       return values.reduce((sum, v) => sum + v, 0) / values.length;
     }
- 
+
     function createSegmentsFromSectorValues(sectorValues) {
       return normalizeSectorValues(sectorValues).map((dirtPercent, index) => ({
         name:       `S${index + 1}`,
@@ -769,8 +707,8 @@
     }
  
     function drawSegmentBase(segment) {
-      const startRad   = degToRad(segment.startDeg);
-      const endRad     = degToRad(segment.endDeg);
+      const startRad    = degToRad(segment.startDeg);
+      const endRad      = degToRad(segment.endDeg);
       const cleanRadius = percentToCleanRadius(segment.dirtPercent);
       drawFullSector(startRad, endRad, '#ffffff');
       if (segment.dirtPercent >= 99.9) {
@@ -880,9 +818,9 @@
     }
  
     function updateRadarInfo(segments) {
-      const dirtValues   = segments.map(s => s.dirtPercent);
-      const maxDirt      = Math.max(...dirtValues);
-      const maxIndex     = dirtValues.indexOf(maxDirt);
+      const dirtValues    = segments.map(s => s.dirtPercent);
+      const maxDirt       = Math.max(...dirtValues);
+      const maxIndex      = dirtValues.indexOf(maxDirt);
       const criticalCount = dirtValues.filter(v => v >= CRITICAL_DIRT_PERCENT).length;
  
       dirtiestSectorEl.textContent = `S${maxIndex + 1} · ${maxDirt.toFixed(1)}%`;
@@ -893,17 +831,17 @@
       });
  
       if (criticalCount > 0) {
-        radarStatus.textContent        = 'Sensor contamination critical';
-        radarStatus.style.background   = '#fee2e2';
-        radarStatus.style.color        = '#b91c1c';
+        radarStatus.textContent      = 'Sensor contamination critical';
+        radarStatus.style.background = '#fee2e2';
+        radarStatus.style.color      = '#b91c1c';
       } else if (maxDirt >= WARNING_DIRT_PERCENT) {
-        radarStatus.textContent        = 'Sensor contaminated';
-        radarStatus.style.background   = '#fef3c7';
-        radarStatus.style.color        = '#b45309';
+        radarStatus.textContent      = 'Sensor contaminated';
+        radarStatus.style.background = '#fef3c7';
+        radarStatus.style.color      = '#b45309';
       } else {
-        radarStatus.textContent        = 'Sensor mostly clean';
-        radarStatus.style.background   = '#dcfce7';
-        radarStatus.style.color        = '#15803d';
+        radarStatus.textContent      = 'Sensor mostly clean';
+        radarStatus.style.background = '#dcfce7';
+        radarStatus.style.color      = '#15803d';
       }
     }
  
@@ -914,11 +852,12 @@
       return segments;
     }
  
-    // ── Rock overlay (Sus Rock only) ────────────────────────────────────────────
-    const rockDisplay = document.getElementById('rockDisplay');
-    const rockImage   = document.getElementById('rockImage');
-    const rockCaption = document.getElementById('rockCaption');
-    const juniorMinorToggle = document.getElementById('juniorMinorToggle'); 
+    // ── Rock mode ───────────────────────────────────────────────────────────────
+    const rockDisplay      = document.getElementById('rockDisplay');
+    const rockImage        = document.getElementById('rockImage');
+    const rockCaption      = document.getElementById('rockCaption');
+    const rockPill         = document.getElementById('rockPill');
+    const juniorMinorToggle = document.getElementById('juniorMinorToggle');
     const blockedAlertSound = new Audio(ASSET_PATHS.blocked);
     blockedAlertSound.volume = 0.75;
  
@@ -959,17 +898,26 @@
       rockDisplay.style.display = 'block';
 
       if (critical) {
-        Image.src = ASSET_PATHS.sus;
-        rockCaption.textContent = "Rock is angry";
-      if (!wasCritical) playCriticalSound();
+        rockImage.src             = ASSET_PATHS.sus;
+        rockCaption.textContent   = "Rock is suspicious";
+        rockPill.textContent      = "Sus Rock";
+        rockPill.style.background = "#fee2e2";
+        rockPill.style.color      = "#dc2626";
+        if (!wasCritical) playCriticalSound();
         wasCritical = true;
       } else if (maxDirt >= WARNING_DIRT_PERCENT) {
-        rockImage.src = ASSET_PATHS.mid;
-        rockCaption.textContent = "Rock is worried";  
+        rockImage.src             = ASSET_PATHS.mid;
+        rockCaption.textContent   = "Rock is getting worried";
+        rockPill.textContent      = "Mid Rock";
+        rockPill.style.background = "#fef9c3";
+        rockPill.style.color      = "#ca8a04";
         wasCritical = false;
       } else {
-        rockImage.src = ASSET_PATHS.happy;
-        rockCaption.textContent = "Rock is calm";
+        rockImage.src             = ASSET_PATHS.happy;
+        rockCaption.textContent   = "Rock seems to be happy";
+        rockPill.textContent      = "Happy Rock";
+        rockPill.style.background = "#dcfce7";
+        rockPill.style.color      = "#16a34a";
         wasCritical = false;
       }
     }
@@ -989,6 +937,7 @@
         blockedAlertSound.currentTime = 0;
       }
     });
+
     // ── Core data + animation ───────────────────────────────────────────────────
     let currentSectorValues = [0, 0, 0, 0, 0];
     let animationFrameId    = null;
@@ -997,22 +946,18 @@
       const sectorValues  = normalizeSectorValues(values);
       currentSectorValues = sectorValues;
  
-      const overallValue  = calculateOverallDirtiness(sectorValues);
-      const roundedValue  = Math.round(overallValue);
+      const overallValue = calculateOverallDirtiness(sectorValues);
+      const roundedValue = Math.round(overallValue);
  
       drawGauge(overallValue);
-      pctText.textContent  = roundedValue + '%';
-      pctText.style.color  = getValueColor(overallValue);
+      pctText.textContent = roundedValue + '%';
+      pctText.style.color = getValueColor(overallValue);
  
       const ps = getPillStyle(roundedValue);
-      pill.textContent    = ps.label;
+      pill.textContent      = ps.label;
       pill.style.background = ps.bg;
       pill.style.color      = ps.fg;
- 
-      // Update manual override slider if it exists
-      if (slider)    slider.value         = roundedValue;
-      if (sliderVal) sliderVal.textContent = roundedValue;
- 
+
       const segments = updateRadarFromSectorValues(sectorValues);
       updateRockStatus(segments);
     }
@@ -1029,8 +974,8 @@
       if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
  
       function step(now) {
-        const elapsed      = now - startTime;
-        const progress     = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
+        const elapsed       = now - startTime;
+        const progress      = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
         const easedProgress = easeInOutCubic(progress);
         const animatedValues = cleanTarget.map((target, i) =>
           startValues[i] + (target - startValues[i]) * easedProgress
@@ -1079,37 +1024,22 @@
       if (SEND_DEMO_VALUES_TO_BACKEND) postSectorValues(targetValues);
       currentInstanceIndex = (currentInstanceIndex + 1) % demoSectorValues.length;
     }
- 
-    // ── Manual override slider (null-safe — works even if block is deleted) ─────
-    if (slider) {
-      slider.addEventListener('input', () => {
-        const v      = parseInt(slider.value, 10);
-        const values = Array.from({ length: N_SECTORS }, () => v);
-        if (animationFrameId !== null) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
-        applySectorValues(values);
-        postSectorValues(values);
-        instanceText.textContent = 'Manual override';
-      });
-    }
- 
+
     // ── Boot ────────────────────────────────────────────────────────────────────
     applySectorValues([0, 0, 0, 0, 0]);
  
     if (DEMO_MODE) {
-      if (modeText) modeText.textContent = 'Demo mode';
       showNextDemoInstance();
       setInterval(showNextDemoInstance, DEMO_INSTANCE_EVERY_MS);
     } else {
-      if (modeText) modeText.textContent = 'Live mode';
       fetchSectorValuesFromBackend();
       setInterval(fetchSectorValuesFromBackend, BACKEND_POLL_INTERVAL_MS);
     }
+
     // ── 3D Point Cloud viewer ───────────────────────────────────────────────────
+    const POINTCLOUD_POLL_MS = 200;
+    const DISPLAY_RADIUS_M   = 0.30;
 
-    const POINTCLOUD_POLL_MS = 200;   // how often to fetch new data (ms)
-    const DISPLAY_RADIUS_M   = 0.30;  // 30 cm display radius
-
-    // Initialise after layout so the container has real dimensions
     function initPointCloud() {
       const container = document.getElementById('pointcloudContainer');
       if (!container.clientWidth || !container.clientHeight) {
@@ -1120,36 +1050,27 @@
       const W = container.clientWidth;
       const H = container.clientHeight;
 
-      // ── Scene ──────────────────────────────────────────────────────────────────
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0xf8fafc);
 
-      // ── Camera — fixed at 45° elevation, no mouse interaction ─────────────────
-      // Position: 0.6m from origin, 45° up, 45° azimuth
       const camera = new THREE.PerspectiveCamera(45, W / H, 0.001, 10);
       camera.position.set(0.3, 0.42, 0.3);
       camera.lookAt(0, 0, 0);
 
-      // ── Renderer ───────────────────────────────────────────────────────────────
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(W, H);
       renderer.setPixelRatio(window.devicePixelRatio);
       container.appendChild(renderer.domElement);
 
-      // ── Ground plane grid ──────────────────────────────────────────────────────
-      // 60 cm × 60 cm, 12 divisions = 5 cm per cell
       const grid = new THREE.GridHelper(0.6, 12, 0x94a3b8, 0xdde1e9);
       scene.add(grid);
 
-      // ── Axis marker at LiDAR origin (small sphere) ────────────────────────────
       const originGeo = new THREE.SphereGeometry(0.005, 8, 8);
       const originMat = new THREE.MeshBasicMaterial({ color: 0x6366f1 });
       scene.add(new THREE.Mesh(originGeo, originMat));
 
-      // ── Point cloud objects ────────────────────────────────────────────────────
       function makePointCloud(color) {
         const geo = new THREE.BufferGeometry();
-        // Start with a dummy point so Three.js doesn't complain about empty geometry
         geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, -999, 0]), 3));
         const mat = new THREE.PointsMaterial({ color, size: 4, sizeAttenuation: false });
         const pts = new THREE.Points(geo, mat);
@@ -1157,18 +1078,16 @@
         return pts;
       }
 
-      const cleanPts = makePointCloud(0x111827); // black
-      const dirtyPts = makePointCloud(0xef4444); // red
+      const cleanPts = makePointCloud(0x111827);
+      const dirtyPts = makePointCloud(0xef4444);
 
-      // ROS is Z-up; Three.js is Y-up.
-      // Conversion: three(x, y, z) = ros(x, z, -y)
       function rosToThree(points) {
         const arr = new Float32Array(points.length * 3);
         for (let i = 0; i < points.length; i++) {
           const [rx, ry, rz] = points[i];
           arr[i * 3]     = rx;
-          arr[i * 3 + 1] = rz;   // ROS Z → Three.js Y (up)
-          arr[i * 3 + 2] = -ry;  // ROS Y → Three.js -Z
+          arr[i * 3 + 1] = rz;
+          arr[i * 3 + 2] = -ry;
         }
         return arr;
       }
@@ -1176,17 +1095,15 @@
       function updatePointCloud(pointsObj, points) {
         const arr = points.length > 0
           ? rosToThree(points)
-          : new Float32Array([0, -999, 0]); // hide dummy below grid
+          : new Float32Array([0, -999, 0]);
         pointsObj.geometry.setAttribute('position', new THREE.BufferAttribute(arr, 3));
         pointsObj.geometry.attributes.position.needsUpdate = true;
         pointsObj.geometry.computeBoundingSphere();
       }
 
-      // ── Demo data (used until backend is wired up) ─────────────────────────────
       function generateDemo() {
         const clean = [], dirty = [];
         for (let i = 0; i < 400; i++) {
-          // Random point in a sphere of DISPLAY_RADIUS_M
           const r     = Math.random() * DISPLAY_RADIUS_M;
           const theta = Math.random() * Math.PI * 2;
           const phi   = Math.acos(2 * Math.random() - 1);
@@ -1198,7 +1115,6 @@
         return { clean, dirty };
       }
 
-      // ── Polling ────────────────────────────────────────────────────────────────
       async function fetchAndUpdate() {
         try {
           const res  = await fetch('/api/pointcloud');
@@ -1208,9 +1124,7 @@
             updatePointCloud(dirtyPts, data.dirty);
             return;
           }
-        } catch (_) {
-          // backend not ready yet — fall through to demo data
-        }
+        } catch (_) {}
         const demo = generateDemo();
         updatePointCloud(cleanPts, demo.clean);
         updatePointCloud(dirtyPts, demo.dirty);
@@ -1219,7 +1133,6 @@
       fetchAndUpdate();
       setInterval(fetchAndUpdate, POINTCLOUD_POLL_MS);
 
-      // ── Render loop ────────────────────────────────────────────────────────────
       function animate() {
         requestAnimationFrame(animate);
         renderer.render(scene, camera);
