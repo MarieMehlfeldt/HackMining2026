@@ -21,14 +21,14 @@ def process_frame(current_frame: dict[str, np.ndarray],
     start = time.perf_counter()
     # 🚨 FIX: Prevent crash on the very first payload
     if old_frame is None:
-        print("First frame received. Waiting for next frame to compute diff...")
+        # print("First frame received. Waiting for next frame to compute diff...")
         return
 
     labels, indices = cluster_frame(current_frame["coords"],
                                     eps=app_settings.dirt_clustering_eps,
                                     min_samples=app_settings.dirt_clustering_min_points,
                                     max_dist=app_settings.dirt_clustering_max_dist)
-    print(f"clustering took {start-time.perf_counter()} s.")
+    # print(f"clustering took {start-time.perf_counter()} s.")
 
     dirty_points_in_sectors, coords_dirty_points, coords_clean_points = find_dirty_clusters(
         labels, indices, current_frame["coords"], current_frame["reflectivity"],
@@ -41,5 +41,5 @@ def process_frame(current_frame: dict[str, np.ndarray],
         cloud_state.data_state["sectors"] = dirty_points_in_sectors.tolist()
         cloud_state.data_state["dirty"] = [pt.tolist() for pt in coords_dirty_points]
         cloud_state.data_state["clean"] = [pt.tolist() for pt in coords_clean_points]
-    print(time.perf_counter() - start)
-    print(f"Processed frame. Sectors: {dirty_points_in_sectors}")
+    # print(time.perf_counter() - start)
+    # print(f"Processed frame. Sectors: {dirty_points_in_sectors}")

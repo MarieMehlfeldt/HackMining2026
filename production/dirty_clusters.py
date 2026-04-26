@@ -2,11 +2,11 @@ import numpy as np
 
 def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame_coords_pre, threshold_distance, threshold_deriv, threshold_reflect, n_sectors, cluster_perc_threshold):
     frame_reflectivity = frame_reflectivity.reshape(frame_coords.shape[0], frame_coords.shape[1])
-    print("labels shape:", labels.shape)
-    print("indices shape:", indices.shape)
-    print("frame_coords shape:", frame_coords.shape)
-    print("frame_reflectivity shape:", frame_reflectivity.shape)
-    print("frame_coords_pre shape:", frame_coords_pre.shape)
+    # print("labels shape:", labels.shape)
+    # print("indices shape:", indices.shape)
+    # print("frame_coords shape:", frame_coords.shape)
+    # print("frame_reflectivity shape:", frame_reflectivity.shape)
+    # print("frame_coords_pre shape:", frame_coords_pre.shape)
 
     coords_dirty_points = []
     coords_clean_points = []
@@ -36,13 +36,13 @@ def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame
     sectors_all = np.minimum((cols * n_sectors) // width, n_sectors - 1)
 
     cluster_labels_unique = np.unique(labels)
-    print(f"n clusters: {len(cluster_labels_unique)}")
+    # print(f"n clusters: {len(cluster_labels_unique)}")
 
     # Iterate by cluster label only; all point-level work stays vectorized.
     for cluster in cluster_labels_unique:
         cluster_mask = labels == cluster
         n_points_in_cluster = int(np.count_nonzero(cluster_mask))
-        if n_points_in_cluster == 0:
+        if n_points_in_cluster == 0 or cluster == 0:
             continue
 
         cluster_dirty_mask = is_dirty_all[cluster_mask]
@@ -61,10 +61,10 @@ def find_dirty_clusters(labels, indices, frame_coords, frame_reflectivity, frame
             continue
 
         perc_dirty_in_cluster = float(cluster_dirty_mask.mean() * 100.0)
-        print(f"Cluster {cluster} has {perc_dirty_in_cluster}% dirty points.")
+        # print(f"Cluster {cluster} has {perc_dirty_in_cluster}% dirty points.")
 
         if perc_dirty_in_cluster > cluster_perc_threshold:
-            print(f"Cluster {cluster} is deemed dirty with {n_points_in_cluster} points")
+            # print(f"Cluster {cluster} is deemed dirty with {n_points_in_cluster} points")
             coords_dirty_points.extend(cluster_coords)
             dirty_sectors = sectors_all[cluster_mask]
             dirty_points_in_sectors += np.bincount(dirty_sectors, minlength=n_sectors)
@@ -105,6 +105,6 @@ if __name__ == "__main__":
         cluster_perc_threshold=20.0,
     )
 
-    print("Dirty percentage per sector:", dirty_perc_in_sectors_ex)
-    print("Number of dirty points:", len(coords_dirty_points_ex))
-    print("Number of clean points:", len(coords_clean_points_ex))
+    # print("Dirty percentage per sector:", dirty_perc_in_sectors_ex)
+    # print("Number of dirty points:", len(coords_dirty_points_ex))
+    # print("Number of clean points:", len(coords_clean_points_ex))

@@ -302,6 +302,8 @@
       ctx.fillStyle = '#9aa0ae';
       ctx.textBaseline = 'middle';
       [{ v: 0, text: '0' }, { v: 12.5, text: '12' }, { v: 25, text: '25' }, { v: 37.5, text: '37' }, { v: 50, text: '50' }].forEach(({ v, text }) => {
+        // 👇 THIS LINE WAS MISSING 👇
+        const angle = valueToAngle(v);
         ctx.textAlign = v === 25 ? 'center' : v < 25 ? 'right' : 'left';
         ctx.fillText(text, CX + LABEL_DIST * Math.cos(angle), CY - LABEL_DIST * Math.sin(angle));
       });
