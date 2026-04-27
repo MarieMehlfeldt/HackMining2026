@@ -3,7 +3,7 @@ Detecting dirt on LIDAR
 
 Collaborators:
 Ole Lee
-Lennart M�ller
+Lennart Müller
 Lukas Schnelle
 Ono Lee
 Marie Mehlfeldt
